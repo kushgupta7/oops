@@ -27,11 +27,7 @@ class ExceptionHandlingTest {
     }
 
     @Test void databaseFailuresAreWrappedWithoutLeakingDetails() {
-        var request = new jakarta.servlet.http.HttpServletRequest() {
-            public String getRequestURI() { return "/api/incidents"; }
-            public String getRemoteAddr() { return "127.0.0.1"; }
-            public String getHeader(String n) { return null; }
-        };
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/incidents");
         var response = new GlobalApiErrors().database(new org.springframework.dao.DataAccessException("duplicate key value violates constraint users_email") { }, request);
         assertEquals(500, response.getStatusCode().value());
         assertEquals("PERSISTENCE_FAILURE", response.getBody().code());
