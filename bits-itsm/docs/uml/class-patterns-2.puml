@@ -1,0 +1,89 @@
+@startuml class-patterns-2
+!include style.iuml
+title BITSolve — Design patterns (Strategy, Observer, Factory, Adapter)
+hide empty members
+package "Strategy (priority)" {
+  interface PriorityStrategy {
+    + calculate(impact, urgency, criticality) : Priority
+  }
+  class MultiplicativePriorityStrategy
+  class WeightedPriorityStrategy
+  class MatrixPriorityStrategy
+  class RuleBasedPriorityStrategy
+  PriorityStrategy <|.. MultiplicativePriorityStrategy
+  PriorityStrategy <|.. WeightedPriorityStrategy
+  PriorityStrategy <|.. MatrixPriorityStrategy
+  PriorityStrategy <|.. RuleBasedPriorityStrategy
+}
+package "Strategy + Factory (assignment)" {
+  interface AssignmentStrategy {
+    + assign(incident, candidates) : Optional<Technician>
+  }
+  class SkillBasedAssignment
+  class LoadBasedAssignment
+  class RoundRobinAssignment {
+    - cursors : ConcurrentHashMap
+  }
+  class PriorityBasedAssignment
+  class SmartRecommendation {
+    + rank(incident, candidates) : List<Recommendation>
+  }
+  class AssignmentStrategies <<factory>> {
+    - strategies : EnumMap<Mode, AssignmentStrategy>
+    + assignWithFallback(mode, incident, candidates)
+  }
+  AssignmentStrategy <|.. SkillBasedAssignment
+  AssignmentStrategy <|.. LoadBasedAssignment
+  AssignmentStrategy <|.. RoundRobinAssignment
+  AssignmentStrategy <|.. PriorityBasedAssignment
+  AssignmentStrategy <|.. SmartRecommendation
+  PriorityBasedAssignment o-- LoadBasedAssignment : routine work
+  AssignmentStrategies o-- AssignmentStrategy
+}
+package "Observer" {
+  class EventBus <<subject>> {
+    - observers : List<IncidentObserver>
+    + publish(event)
+  }
+  interface IncidentObserver {
+    + onEvent(IncidentEvent)
+  }
+  class AuditLogger
+  class NotificationService
+  class EmailChannel
+  EventBus o-- IncidentObserver
+  IncidentObserver <|.. AuditLogger
+  IncidentObserver <|.. NotificationService
+  IncidentObserver <|.. EmailChannel
+}
+package "Factory + Adapter (notifications)" {
+  interface NotificationChannel {
+    + send(notification)
+    + accepts(notification) : boolean
+  }
+  class NotificationFactory <<factory>> {
+    + {static} create(event, recipient) : Notification
+  }
+  class NotificationChannelFactory <<factory>> {
+    + channelsFor(notification) : List<NotificationChannel>
+  }
+  class InAppChannel
+  class SmsChannel
+  interface SmsGateway <<target>> {
+    + send(phone, text) : String
+  }
+  class SmsGatewayAdapter <<adapter>>
+  class ThirdPartySmsApi <<adaptee>> {
+    + dispatch(msisdn, payload, senderId) throws SmsDeliveryException
+  }
+  NotificationChannel <|.. InAppChannel
+  NotificationChannel <|.. SmsChannel
+  SmsChannel --> SmsGateway
+  SmsGateway <|.. SmsGatewayAdapter
+  SmsGatewayAdapter --> ThirdPartySmsApi
+  NotificationService --> NotificationChannelFactory
+  NotificationService ..> NotificationFactory
+  NotificationChannelFactory o-- NotificationChannel
+}
+SmsGatewayAdapter ..> "ExternalServiceException" : converts checked SmsDeliveryException
+@enduml

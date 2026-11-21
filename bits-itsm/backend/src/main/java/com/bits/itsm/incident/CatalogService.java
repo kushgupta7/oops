@@ -23,7 +23,10 @@ public class CatalogService implements ApplicationRunner {
     public List<CatalogEntry> all() { return em.createQuery("select c from CatalogEntry c order by c.kind, c.label", CatalogEntry.class).getResultList(); }
     public CatalogEntry get(String kind, String code) {
         CatalogEntry entry = em.find(CatalogEntry.class, kind + ":" + code);
-        if (entry == null) throw new IllegalArgumentException("Unknown catalog entry.");
+        if (entry == null) {
+            if ("SERVICE".equals(kind)) throw new com.bits.itsm.exception.ServiceNotFoundException("IT service " + code + " does not exist.");
+            throw new IllegalArgumentException("Unknown catalog entry.");
+        }
         return entry;
     }
     public void requireEnabled(String kind, String code) {

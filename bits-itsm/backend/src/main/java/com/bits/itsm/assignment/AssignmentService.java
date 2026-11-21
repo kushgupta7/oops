@@ -25,10 +25,11 @@ public class AssignmentService implements ApplicationRunner {
     private final CollaborationRequestRepository collaborations;
     private final JdbcTemplate jdbc;
     private final com.bits.itsm.event.IncidentEventPublisher events;
+    private final AssignmentStrategies strategies;
     public AssignmentService(IncidentRepository incidents, UserRepository users, WorkloadService workloads,
-            AssignmentSettingsRepository settings, TransferRequestRepository transfers, CollaborationRequestRepository collaborations, JdbcTemplate jdbc, com.bits.itsm.event.IncidentEventPublisher events) {
+            AssignmentSettingsRepository settings, TransferRequestRepository transfers, CollaborationRequestRepository collaborations, JdbcTemplate jdbc, com.bits.itsm.event.IncidentEventPublisher events, AssignmentStrategies strategies) {
         this.incidents = incidents; this.users = users; this.workloads = workloads; this.settings = settings;
-        this.transfers = transfers; this.collaborations = collaborations; this.jdbc = jdbc; this.events = events;
+        this.transfers = transfers; this.collaborations = collaborations; this.jdbc = jdbc; this.events = events; this.strategies = strategies;
     }
     @Override @Transactional
     public void run(ApplicationArguments arguments) {
@@ -63,8 +64,21 @@ public class AssignmentService implements ApplicationRunner {
     private Technician eligible(Incident incident, Long id, TechnicianSkill required) {
         User selected = users.findById(id).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Technician not found."));
         if (!(selected instanceof Technician)) throw new IllegalArgumentException("Select a technician account.");
-        return workloads.candidates(incident).stream().filter(c -> c.technician().getId().equals(id) && c.eligible(required))
-                .map(AssignmentStrategy.Candidate::technician).findFirst().orElseThrow(() -> new IllegalStateException("Technician is already on this incident, disabled, busy, unavailable, unqualified or at capacity."));
+        AssignmentStrategy.Candidate candidate = workloads.candidates(incident).stream().filter(c -> c.technician().getId().equals(id)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Technician is already on this incident."));
+        if (candidate.eligible(required)) return candidate.technician();
+        Technician t = candidate.technician();
+        boolean otherwiseEligible = t.isEnabled() && t.isAvailable() && (required == null || t.getSkills().contains(required));
+        if (otherwiseEligible && candidate.workload() >= t.getMaxWorkload()) {
+            throw new com.bits.itsm.exception.WorkloadExceededException(t.getName() + " is at maximum workload (" + candidate.workload() + "/" + t.getMaxWorkload() + ").");
+        }
+        throw new IllegalStateException("Technician is already on this incident, disabled, busy, unavailable, unqualified or at capacity.");
+    }
+    /** Intelligent feature D: top-3 technician recommendations with explanations (admin only). */
+    public List<SmartRecommendation.Recommendation> recommendations(Long id, String email) {
+        actor(email, Role.ADMIN);
+        Incident incident = incidents.findById(id).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Incident not found."));
+        return strategies.smart().top(incident, workloads.candidates(incident), 3);
     }
     public Strategy strategy(String email) { actor(email, Role.ADMIN); return new Strategy(settings.findById(1L).orElseThrow().getStrategy()); }
     @Transactional public Strategy selectStrategy(Strategy request, String email) {
@@ -94,8 +108,12 @@ public class AssignmentService implements ApplicationRunner {
         Technician technician;
         if (automatic) {
             incident.require(IncidentStatus.CLASSIFIED);
-            AssignmentStrategy strategy = settings.findById(1L).orElseThrow().getStrategy() == AssignmentSettings.Mode.SKILL_BASED ? new SkillBasedAssignment() : new LoadBasedAssignment();
-            technician = strategy.assign(incident, workloads.candidates(incident)).orElseThrow(() -> new IllegalStateException("No eligible technician available. Incident remains classified and awaiting assignment."));
+            // Strategy pattern: the admin-selected algorithm runs first; others are tried as audited fallbacks.
+            AssignmentSettings.Mode selected = settings.findById(1L).orElseThrow().getStrategy();
+            AssignmentStrategies.Outcome outcome = strategies.assignWithFallback(selected, incident, workloads.candidates(incident))
+                    .orElseThrow(() -> new com.bits.itsm.exception.TechnicianUnavailableException("No eligible technician available. Incident remains classified and awaiting assignment."));
+            technician = outcome.technician();
+            if (outcome.fallback()) incident.record(user, "ASSIGNMENT_FALLBACK", selected + " found no technician; used " + outcome.used() + " instead.", INTERNAL);
         } else technician = eligible(incident, technicianId, incident.requiredSkill());
         String previous = incident.getAssignedTechnician() == null ? "Unassigned" : incident.getAssignedTechnician().getId().toString();
         if (incident.getStatus() == IncidentStatus.CLASSIFIED) incident.assign(technician); else incident.reassign(technician);

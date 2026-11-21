@@ -13,7 +13,9 @@ public enum EventType {
     SLA_WARNING("SLA Warning"),
     SLA_BREACHED("SLA Breached"),
     INCIDENT_ESCALATED("Incident Escalated"),
-    DUPLICATE_DETECTED("Duplicate Detected");
+    DUPLICATE_DETECTED("Duplicate Detected"),
+    INFORMATION_REQUESTED("Information Requested"),
+    MAJOR_INCIDENT_DETECTED("Major Incident Detected");
 
     private final String label;
 

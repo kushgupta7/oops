@@ -34,7 +34,12 @@ public final class TextSimilarity {
     }
 
     public static Set<String> tokens(String text) {
-        Set<String> result = new HashSet<>();
+        return new HashSet<>(tokenList(text));
+    }
+
+    /** Same normalisation pipeline as {@link #tokens} but keeps repetitions (term frequency for TF-IDF). */
+    public static java.util.List<String> tokenList(String text) {
+        java.util.List<String> result = new java.util.ArrayList<>();
         if (text == null) {
             return result;
         }

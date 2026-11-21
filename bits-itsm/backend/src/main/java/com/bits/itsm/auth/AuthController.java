@@ -120,9 +120,11 @@ public class AuthController {
         return Account.from(user);
     }
 
+    /** Every authentication failure becomes one generic InvalidLoginException (no account enumeration). */
     @ExceptionHandler(AuthenticationException.class)
-    ResponseEntity<Map<String, String>> authenticationFailure() {
-        return ResponseEntity.status(401).body(Map.of("message", "Invalid email or password."));
+    ResponseEntity<com.bits.itsm.exception.ApiError> authenticationFailure(HttpServletRequest request) {
+        var failure = new com.bits.itsm.exception.InvalidLoginException("Invalid email or password.");
+        return ResponseEntity.status(failure.httpStatus()).body(com.bits.itsm.exception.ApiError.of(failure.httpStatus(), failure.code(), failure.getMessage(), request.getRequestURI()));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,

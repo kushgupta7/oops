@@ -1,6 +1,131 @@
-# BITSolve
+# BITSolve: Intelligent IT Service Management & Incident Resolution
 
-Smart Campus IT Support for BITS Pilani Hyderabad Campus. Java 25, Spring Boot 4.1.2, React/Vite and PostgreSQL.
+CS F213 Object-Oriented Programming, BITS Pilani Hyderabad, Sem I 2026-27 · Group **[GROUP_NO]**
+
+Campus IT incident management with three role-specific portals (Student, Technician, Administrator), a State-pattern lifecycle, runtime-switchable priority and assignment strategies, SLA monitoring with escalation, event-driven notifications (in-app, e-mail, simulated SMS), an immutable audit trail, and seven rule-based intelligent features. Java 25 · Spring Boot 4.1 · PostgreSQL · React 19 + Vite + Recharts.
+
+![Architecture](bits-itsm/docs/diagrams/architecture.png)
+
+## Quick start (one command)
+
+```bash
+cd bits-itsm
+docker compose up --build
+```
+
+* App and UI: http://localhost:8080
+* MailHog (e-mails sent by the app): http://localhost:8025
+* The `dev` profile seeds demo users and 60 historical incidents (only into an empty database).
+
+### Demo credentials (docker-compose / dev profile only)
+
+Password for every demo account: `BitsolveDemo2026` (override with `DEMO_USER_PASSWORD`).
+
+| Role | E-mail | Notes |
+|---|---|---|
+| Administrator | `admin01@hyderabad.bits-pilani.ac.in` | Also acts as team lead |
+| Technician | `technician01@…` | Hardware |
+| Technician | `technician02@…` | Software |
+| Technician | `technician03@…` | Database |
+| Technician | `technician04@…` | Network (use for the Wi-Fi demo) |
+| Student | `student01@…` … `student04@…` | Reporters |
+
+All e-mails end in `@hyderabad.bits-pilani.ac.in`.
+
+## Feature checklist (brief → implementation)
+
+| Brief requirement | Implementation |
+|---|---|
+| Register / login | ✅ Students self-register (institutional e-mail); staff accounts created by admins; role-specific login |
+| Automatic classification | ✅ Service, impact, urgency and category detected from the report text; uncertain reports go to an admin review queue (`classification/`) |
+| Employee adds information, responds to requests | ✅ Add information at any time while open; replies to technician questions resume the paused SLA |
+| Report, classify, prioritise, assign, investigate, resolve, verify, close | ✅ All three portals; lifecycle enforced by the **State pattern** (`incident/state`) incl. `AWAITING_INFO` with paused SLA, reopen, and 72 h auto-close |
+| ≥3 roles with different UI | ✅ Student (teal), Technician (indigo), Administrator (navy/amber) portals with their own home pages |
+| Priority determination | ✅ impact, urgency, service criticality and number of affected users; 4 runtime-switchable strategies ([PRIORITY_ALGORITHM.md](bits-itsm/docs/PRIORITY_ALGORITHM.md)) |
+| Technician assignment | ✅ Skill, Load, Round-robin, Priority-based, Smart recommendation + audited fallback; transfer/collaboration approvals |
+| SLA management | ✅ Policies per priority with a per-service SLA factor, captured deadlines, background monitor (warning at 80 %, breach), compliance % |
+| Notifications | ✅ Observer: in-app (persisted), e-mail outbox with retry, simulated SMS via **Adapter** |
+| Audit trail | ✅ Immutable audit + per-incident history, admin filter |
+| Search, filtering, reporting | ✅ 9 combinable criteria (API and UI), Insights & Analytics dashboards (Recharts), CSV + print-to-PDF export |
+| ≥2 intelligent features | ✅ 7: duplicate detection, major-incident correlation, P1 escalation (Chain of Responsibility), smart technician recommendation, SLA-risk prediction, auto-categorisation, suggested resolutions (TF-IDF) |
+| ≥2 design patterns | ✅ State, Strategy, Observer, Factory, Adapter, Chain of Responsibility, Repository ([DESIGN_PATTERNS.md](bits-itsm/docs/DESIGN_PATTERNS.md)) |
+| Exception handling | ✅ `BitsolveException` hierarchy covering all 12 situations in the brief, consistent JSON errors `{timestamp,status,code,message,path}` |
+| Persistence | ✅ PostgreSQL, Flyway V1–V9 |
+| ≥15 documented test cases | ✅ 53 documented, ≈230 automated ([TEST_CASES.md](bits-itsm/docs/TEST_CASES.md)) |
+| Innovation | ✅ Correlation, SLA-risk prediction, smart recommendation, TF-IDF suggestions, analytics dashboard, automated escalation, event-driven design, Docker + CI, cloud-ready |
+
+Gaps and deliberate deviations are listed in [PLAN.md](bits-itsm/docs/PLAN.md) and [DECISIONS.md](bits-itsm/docs/DECISIONS.md).
+
+## Documentation
+
+| Deliverable | File |
+|---|---|
+| Full report (PDF) | `bits-itsm/docs/[GROUP_NO]_OOP_Report.pdf`. After filling names in `docs/TEAM.md` and `docs/build_report.py`, run `python3 docs/build_report.py` (needs pandoc), open `docs/report.html` in Chrome, Print → Save as PDF |
+| Problem analysis | [PROBLEM_ANALYSIS.md](bits-itsm/docs/PROBLEM_ANALYSIS.md) |
+| Requirements | [REQUIREMENTS.md](bits-itsm/docs/REQUIREMENTS.md) |
+| Architecture | [ARCHITECTURE.md](bits-itsm/docs/ARCHITECTURE.md) |
+| UML (PlantUML sources + PNG) | [docs/uml](bits-itsm/docs/uml): use case, 2 class diagrams (domain, patterns), state, 3 sequence diagrams |
+| Technology stack (9 questions) | [TECH_STACK.md](bits-itsm/docs/TECH_STACK.md) |
+| Database / ER | [DATABASE.md](bits-itsm/docs/DATABASE.md) |
+| Patterns, priority, security, tests, decisions | `DESIGN_PATTERNS.md`, `PRIORITY_ALGORITHM.md`, `SECURITY.md`, `TEST_CASES.md`, `DECISIONS.md` |
+| Team responsibilities | [TEAM.md](bits-itsm/docs/TEAM.md) |
+| Demo video script | [DEMO_SCRIPT.md](bits-itsm/docs/DEMO_SCRIPT.md) |
+
+## Running tests
+
+```bash
+cd bits-itsm/frontend && npm ci && npm test && npm run build
+cd ../backend && ./mvnw verify                      # unit + MockMvc
+BITSOLVE_DB_TESTS=true ./mvnw -Pcoverage verify      # + PostgreSQL integration, JaCoCo report in target/site/jacoco
+```
+
+PostgreSQL tests need a disposable database (see *Builds and tests* below). GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on every push.
+
+## Main API endpoints
+
+| Area | Endpoints |
+|---|---|
+| Auth | `GET /api/auth/csrf`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
+| Incidents | `GET/POST /api/incidents` (filters: `search,status,category,priority,service,technician,from,to,sla`), `GET /api/incidents/my`, `GET /api/incidents/{id}`, `POST /api/incidents/{id}/{classify,acknowledge,start,notes,information,reply,comment,resolve,verify,close,feedback,edit}`, `GET /api/incidents/lifecycle` |
+| Assignment | `POST /api/incidents/{id}/{assign,auto-assign}`, `GET /api/incidents/{id}/recommendations`, `GET/PUT /api/admin/assignment-strategy`, transfer/collaboration request endpoints |
+| Priority & SLA | `GET/PUT /api/admin/priority-strategy`, `POST …/preview`, `GET/PUT /api/admin/sla-policies/{priority}`, `GET /api/admin/sla/violations`, `GET /api/admin/escalations` |
+| Insights | `GET /api/admin/insights/{analytics,major-incidents,sla-risk}`, `GET /api/technician/sla-risk`, `GET /api/{technician,admin}/incidents/{id}/suggested-resolutions`, `GET /api/admin/reports/incidents.csv`, `GET /api/admin/sms-outbox` |
+| Admin | users, catalog (services/categories), reports, audit, e-mail outbox under `/api/admin/**` |
+
+## Folder structure
+
+```text
+bits-itsm/
+├── backend/src/main/java/com/bits/itsm/
+│   ├── incident/        Incident aggregate, lifecycle services, SLA policy capture
+│   │   └── state/       State pattern: IncidentState + 9 state classes
+│   ├── assignment/      Assignment strategies, registry/fallback, transfers, workload
+│   ├── priority/        4 priority strategies + runtime settings
+│   ├── sla/             SLA calculator, monitor, scheduled events, auto-close
+│   ├── escalation/      Chain-of-Responsibility escalation
+│   ├── event/ audit/    Observer subject, events, audit trail
+│   ├── notification/    In-app, e-mail outbox, channel factory, sms/ Adapter
+│   ├── intelligence/    Duplicates, correlation, SLA risk, TF-IDF, suggestions, categories
+│   ├── exception/       BitsolveException hierarchy + global JSON errors
+│   ├── api/             Insights/analytics/CSV, admin and service endpoints
+│   ├── auth/ user/      Security, sessions, user inheritance, demo seeders
+│   └── support/         Read-only snapshots for background jobs
+├── backend/src/main/resources/db/migration   Flyway V1–V9
+├── frontend/src         React portals, Insights (Recharts), API client
+├── docs/                Report, UML, design documents, demo script
+├── Dockerfile           React + Spring Boot in one image
+└── docker-compose.yml   PostgreSQL + app + MailHog
+```
+
+## Verification status (21 Nov 2026)
+
+* 136 backend unit tests run here pass (the Mockito/Spring/PostgreSQL suites need the real Maven build); Flyway V1–V9 applied to PostgreSQL 16; demo seeder verified on PostgreSQL; frontend tests (5/5) and production build pass; Insights page checked in headless Chromium.
+* **Before submitting**, run `./mvnw verify` (and the PostgreSQL suite) on a machine with Maven Central access: the final-stage changes could not be built with the real Spring/Hibernate libraries in the environment where they were written.
+
+---
+
+# Operational details (team notes)
+
 
 ## Implemented
 

@@ -35,6 +35,8 @@ public class IncidentEventPublisher {
             case "RESOLVED" -> EventType.INCIDENT_RESOLVED;
             case "CLOSED" -> EventType.INCIDENT_CLOSED;
             case "PRIORITY_CHANGED" -> EventType.PRIORITY_CHANGED;
+            case "INFORMATION_REQUESTED" -> EventType.INFORMATION_REQUESTED;
+            case "AUTO_CLOSED" -> EventType.INCIDENT_CLOSED;
             default -> EventType.INCIDENT_UPDATED;
         };
     }

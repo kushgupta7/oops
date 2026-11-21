@@ -1,0 +1,74 @@
+@startuml use-case
+!include style.iuml
+left to right direction
+title BITSolve — Use Case Diagram
+actor Student as S
+actor Technician as T
+actor Administrator as A
+actor "System scheduler" as SYS <<system>>
+actor "SMTP / SMS gateway" as EXT <<external>>
+rectangle "BITSolve I-ITSM" {
+  usecase "Sign in / sign out" as UC0
+  usecase "Report incident" as UC1
+  usecase "See auto-category &\nduplicate warning" as UC1a
+  usecase "Track own incidents" as UC2
+  usecase "Reply to info request" as UC3
+  usecase "Verify or reopen resolution" as UC4
+  usecase "Give feedback (1-5)" as UC5
+  usecase "Acknowledge & investigate" as UC6
+  usecase "Add notes" as UC7
+  usecase "Request information\n(AWAITING_INFO, SLA paused)" as UC8
+  usecase "Resolve with steps" as UC9
+  usecase "View suggested resolutions" as UC10
+  usecase "Request transfer / collaborator" as UC11
+  usecase "View own workload" as UC12
+  usecase "Classify & prioritise" as UC13
+  usecase "Assign (manual / strategy)" as UC14
+  usecase "View smart recommendations" as UC15
+  usecase "Select assignment &\npriority strategy" as UC16
+  usecase "Manage users, technicians,\nservices, categories" as UC17
+  usecase "Configure SLA policies" as UC18
+  usecase "Approve transfers / collaboration" as UC19
+  usecase "Insights, reports, CSV/PDF export" as UC20
+  usecase "Audit logs" as UC21
+  usecase "Close verified incident" as UC22
+  usecase "Monitor SLA (warn / breach)" as UC23
+  usecase "Escalate unacknowledged P1" as UC24
+  usecase "Correlate major incidents" as UC25
+  usecase "Auto-close after 72 h" as UC26
+  usecase "Send notifications" as UC27
+}
+S --> UC0
+S --> UC1
+UC1 ..> UC1a : <<include>>
+S --> UC2
+S --> UC3
+S --> UC4
+S --> UC5
+T --> UC0
+T --> UC6
+T --> UC7
+T --> UC8
+T --> UC9
+T --> UC10
+T --> UC11
+T --> UC12
+A --> UC0
+A --> UC13
+A --> UC14
+UC14 ..> UC15 : <<extend>>
+A --> UC16
+A --> UC17
+A --> UC18
+A --> UC19
+A --> UC20
+A --> UC21
+A --> UC22
+SYS --> UC23
+SYS --> UC24
+SYS --> UC25
+SYS --> UC26
+UC23 ..> UC27 : <<include>>
+UC24 ..> UC27 : <<include>>
+UC27 --> EXT
+@enduml

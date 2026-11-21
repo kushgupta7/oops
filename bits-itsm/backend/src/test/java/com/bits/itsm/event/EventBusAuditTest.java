@@ -86,7 +86,8 @@ class EventBusAuditTest {
         assertEquals(EventType.INCIDENT_CREATED, IncidentEventPublisher.typeFor("CREATED"));
         assertEquals(EventType.INCIDENT_ASSIGNED, IncidentEventPublisher.typeFor("AUTO_ASSIGNED"));
         assertEquals(EventType.INCIDENT_RESOLVED, IncidentEventPublisher.typeFor("RESOLVED"));
-        assertEquals(EventType.INCIDENT_UPDATED, IncidentEventPublisher.typeFor("INFORMATION_REQUESTED"));
+        assertEquals(EventType.INFORMATION_REQUESTED, IncidentEventPublisher.typeFor("INFORMATION_REQUESTED"));
+        assertEquals(EventType.INCIDENT_UPDATED, IncidentEventPublisher.typeFor("NOTE_ADDED"));
         assertEquals(EventType.INCIDENT_UPDATED, IncidentEventPublisher.typeFor(null));
     }
 

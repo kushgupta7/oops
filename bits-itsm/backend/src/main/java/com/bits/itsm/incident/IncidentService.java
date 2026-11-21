@@ -71,6 +71,27 @@ public class IncidentService {
                 catalog.all().stream().filter(c -> c.isEnabled() && c.getKind().equals("SERVICE")).map(c -> new Option(c.getCode(), c.getLabel())).toList());
     }
     public List<View> list(String email, boolean mine, String search, IncidentStatus status, Incident.Category category, Incident.Priority priority) {
+        return list(email, mine, new SearchCriteria(search, status, category, priority, null, null, null, null, null));
+    }
+    /**
+     * Combinable search over nine criteria: ID/keyword (title, description, INC label), status, category,
+     * priority, service, technician, date range (campus time zone) and SLA status. Role scoping is applied
+     * first, so a filter can never widen what a user may see.
+     */
+    public record SearchCriteria(String search, IncidentStatus status, Incident.Category category, Incident.Priority priority,
+                                 Incident.ItService service, Long technicianId, String from, String to, SlaClock.Status sla) { }
+    public List<View> list(String email, boolean mine, SearchCriteria c) {
+        String search = c.search(); IncidentStatus status = c.status(); Incident.Category category = c.category(); Incident.Priority priority = c.priority();
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Kolkata");
+        java.time.Instant from, to;
+        try {
+            from = c.from() == null || c.from().isBlank() ? null : java.time.LocalDate.parse(c.from()).atStartOfDay(zone).toInstant();
+            to = c.to() == null || c.to().isBlank() ? null : java.time.LocalDate.parse(c.to()).plusDays(1).atStartOfDay(zone).toInstant();
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new com.bits.itsm.exception.ValidationException("Dates must use the format YYYY-MM-DD.");
+        }
+        if (from != null && to != null && !from.isBefore(to)) throw new com.bits.itsm.exception.ValidationException("The start date must not be after the end date.");
+        java.time.Instant now = java.time.Instant.now();
         User user = actor(email);
         if (mine) role(user, Role.STUDENT);
         List<Incident> found = switch (user.getRole()) {
@@ -78,11 +99,25 @@ public class IncidentService {
             case TECHNICIAN -> incidents.findByAssignedTechnicianIdOrderByCreatedAtDesc(user.getId());
             case ADMIN -> incidents.findAllByOrderByCreatedAtDesc();
         };
-        String query = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        String query = search == null ? "" : search.trim().toLowerCase(Locale.ROOT).replaceFirst("^inc-?", "");
         return found.stream().filter(i -> (status == null || i.getStatus() == status) && (category == null || i.getCategory() == category)
                 && (priority == null || i.getPriority() == priority)
-                && (i.getTitle().toLowerCase(Locale.ROOT).contains(query) || i.getId().toString().contains(query)))
+                && (c.service() == null || i.getAffectedService() == c.service())
+                && (c.technicianId() == null || (i.getAssignedTechnician() != null && i.getAssignedTechnician().getId().equals(c.technicianId())))
+                && (from == null || !i.getCreatedAt().isBefore(from)) && (to == null || i.getCreatedAt().isBefore(to))
+                && (c.sla() == null || worst(i.responseSla(now), i.resolutionSla(now)) == c.sla())
+                && (i.getTitle().toLowerCase(Locale.ROOT).contains(query) || i.getId().toString().contains(query)
+                    || i.getDescription().toLowerCase(Locale.ROOT).contains(query)))
                 .map(i -> view(i, user)).toList();
+    }
+    /** Overall SLA status = the worse of the response and resolution clocks (null when no SLA yet). */
+    static SlaClock.Status worst(SlaClock.Status a, SlaClock.Status b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        if (a == SlaClock.Status.BREACHED || b == SlaClock.Status.BREACHED) return SlaClock.Status.BREACHED;
+        if (a == SlaClock.Status.AT_RISK || b == SlaClock.Status.AT_RISK) return SlaClock.Status.AT_RISK;
+        if (a == SlaClock.Status.ON_TRACK || b == SlaClock.Status.ON_TRACK) return SlaClock.Status.ON_TRACK;
+        return SlaClock.Status.MET;
     }
     public List<View> team(String email) {
         User user = actor(email); role(user, Role.TECHNICIAN);
@@ -94,11 +129,41 @@ public class IncidentService {
         access(incident, user);
         return view(incident, user);
     }
+    // Idempotency keys of recent submissions (key -> time seen). ConcurrentHashMap: requests arrive on parallel threads.
+    private final java.util.concurrent.ConcurrentHashMap<String, java.time.Instant> submissions = new java.util.concurrent.ConcurrentHashMap<>();
+    static final java.time.Duration SUBMISSION_MEMORY = java.time.Duration.ofMinutes(10);
+
     @Transactional
-    public View create(Create request, String email) {
+    public View create(Create request, String email) { return create(request, email, null); }
+
+    /**
+     * Creates an incident. The browser sends a fresh Idempotency-Key per form; if the same key arrives again
+     * (double click, network retry) the report is rejected with DuplicateIncidentException instead of creating
+     * a second identical incident. Similar-but-new reports are not rejected: they get a duplicate warning.
+     */
+    @Transactional
+    public View create(Create request, String email, String idempotencyKey) {
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : email + ":" + idempotencyKey;
+        if (key != null) {
+            java.time.Instant now = java.time.Instant.now();
+            submissions.entrySet().removeIf(e -> e.getValue().isBefore(now.minus(SUBMISSION_MEMORY)));
+            // putIfAbsent is atomic, so two simultaneous clicks cannot both pass.
+            if (submissions.putIfAbsent(key, now) != null) {
+                throw new com.bits.itsm.exception.DuplicateIncidentException("This report was already submitted. Check My Incidents.");
+            }
+        }
+        try {
+            return createOnce(request, email);
+        } catch (RuntimeException failed) {
+            if (key != null) submissions.remove(key);  // a rejected report may be corrected and sent again with the same key
+            throw failed;
+        }
+    }
+    private View createOnce(Create request, String email) {
         User user = actor(email); role(user, Role.STUDENT);
         Incident incident = new Incident(request.title(), request.description(), (Student) user,
                 request.category(), request.affectedService(), request.impact(), request.urgency());
+        incident.reportAffectedUsers(request.affectedUsers());
         incident.record(user, "CREATED", "Incident reported.", STUDENT_VISIBLE);
         incidents.saveAndFlush(incident);
         events.publish(incident.getId(), user.getId(), "CREATED", null, "NEW", "Incident reported.");
@@ -122,9 +187,17 @@ public class IncidentService {
             throw new IllegalStateException("Affected service is not yet determined. Use adminReclassify to provide service and severity.");
         }
         Incident.Level criticality = priorities.criticality(incident.getAffectedService());
-        incident.classify(request.category(), priorities.calculate(incident, criticality));
+        Incident.Priority calculated = priorities.calculate(incident, criticality);
+        Incident.Priority adjusted = com.bits.itsm.priority.AffectedUsersRule.apply(calculated, incident.getAffectedUsers());
+        incident.classify(request.category(), adjusted);
         incident.captureCriticality(criticality);
         slaPolicies.capture(incident);
+        if (adjusted != calculated) {
+            incident.record(user, "PRIORITY_RAISED", "Priority raised from " + calculated + " to " + adjusted + ": " + incident.getAffectedUsers() + " people affected (more than " + com.bits.itsm.priority.AffectedUsersRule.THRESHOLD + ").", STUDENT_VISIBLE);
+        }
+        if (incident.getSlaFactor() != null && incident.getSlaFactor() != 1.0) {
+            incident.record(user, "SLA_ADJUSTED", "Service SLA factor ×" + incident.getSlaFactor() + " for " + incident.getAffectedService().getLabel() + ": response " + incident.getResponseTargetMinutes() + " min, resolution " + incident.getResolutionTargetMinutes() + " min.", STUDENT_VISIBLE);
+        }
         events.publish(id, user.getId(), "PRIORITY_CHANGED", "PENDING", incident.getPriority().name(), "Calculated using " + priorities.current().getStrategy() + "; criticality: " + criticality);
         incident.record(user, "PRIORITY_ASSIGNED", "Priority: " + incident.getPriority() + "; criticality: " + criticality, STUDENT_VISIBLE);
         return finish(incident, user, "CLASSIFIED", "Category confirmed: " + request.category());
@@ -159,7 +232,7 @@ public class IncidentService {
     @Transactional
     public View note(Long id, Note request, String email) {
         User user = actor(email); Incident incident = editable(id, user, Role.TECHNICIAN, true);
-        incident.require(IncidentStatus.IN_PROGRESS);
+        incident.requireAny(IncidentStatus.IN_PROGRESS, IncidentStatus.AWAITING_INFO);
         incident.addNote(user, request.content(), request.visibility(), NOTE);
         incident.record(user, "NOTE_ADDED", "Investigation note added.", request.visibility());
         incidents.flush();
@@ -169,10 +242,29 @@ public class IncidentService {
     @Transactional
     public View information(Long id, Message request, String email, boolean reply) {
         User user = actor(email); Incident incident = editable(id, user, reply ? Role.STUDENT : Role.TECHNICIAN);
-        incident.require(IncidentStatus.IN_PROGRESS);
-        if (reply && incident.getNotes().stream().noneMatch(n -> n.getKind() == INFORMATION_REQUEST)) throw new IllegalStateException("There is no information request to reply to.");
+        // State pattern: a request moves IN_PROGRESS -> AWAITING_INFO (SLA paused); the reply moves it back.
+        if (reply) {
+            if (incident.getNotes().stream().noneMatch(n -> n.getKind() == INFORMATION_REQUEST)) throw new IllegalStateException("There is no information request to reply to.");
+            incident.informationReceived();
+        } else {
+            incident.requestInformation();
+        }
         incident.addNote(user, request.content(), STUDENT_VISIBLE, reply ? STUDENT_REPLY : INFORMATION_REQUEST);
         return finish(incident, user, reply ? "STUDENT_REPLIED" : "INFORMATION_REQUESTED", reply ? "Student replied to support." : "Technician requested additional information.");
+    }
+    /**
+     * Brief: the employee can "add additional information" at any time while the incident is open.
+     * If the technician is waiting for an answer (AWAITING_INFO) the information counts as the reply and resumes the SLA clock.
+     */
+    @Transactional
+    public View addInformation(Long id, Message request, String email) {
+        User user = actor(email);
+        Incident peek = incidents.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found."));
+        if (peek.getStatus() == IncidentStatus.AWAITING_INFO) return information(id, request, email, true);
+        Incident incident = editable(id, user, Role.STUDENT);
+        incident.requireAny(IncidentStatus.NEW, IncidentStatus.CLASSIFIED, IncidentStatus.ASSIGNED, IncidentStatus.ACKNOWLEDGED, IncidentStatus.IN_PROGRESS);
+        incident.addNote(user, request.content(), STUDENT_VISIBLE, STUDENT_REPLY);
+        return finish(incident, user, "INFORMATION_ADDED", "Reporter added information.");
     }
     @Transactional
     public View resolve(Long id, Resolution request, String email) {
@@ -205,6 +297,38 @@ public class IncidentService {
         incident.giveFeedback((Student) user, request.rating(), request.comment());
         return finish(incident, user, "FEEDBACK_SUBMITTED", "Reporter submitted support feedback.");
     }
+    /**
+     * Auto-closure policy: an incident left RESOLVED or VERIFIED with no reporter activity since
+     * {@code cutoff} is verified/closed by the system. History is attributed to the first enabled
+     * administrator because every history row needs an actor; the description makes the automation explicit.
+     */
+    @Transactional
+    public int autoClose(java.time.Instant cutoff) {
+        User system = users.findAll().stream().filter(u -> u.getRole() == Role.ADMIN && u.isEnabled()).findFirst().orElse(null);
+        if (system == null) return 0;
+        int closed = 0;
+        for (Incident stale : incidents.findByStatusInAndUpdatedAtBefore(List.of(IncidentStatus.RESOLVED, IncidentStatus.VERIFIED), cutoff)) {
+            Incident incident = incidents.findForUpdate(stale.getId()).orElse(null);
+            if (incident == null || incident.getUpdatedAt().isAfter(cutoff)) continue;
+            if (incident.getStatus() == IncidentStatus.RESOLVED) {
+                incident.state().requireTransition(IncidentStatus.VERIFIED, com.bits.itsm.incident.state.LifecycleActor.SYSTEM);
+                incident.verify();
+                record(incident, system, "AUTO_VERIFIED", "Automatically verified: no reporter response within 72 hours.", "RESOLVED");
+            }
+            if (incident.getStatus() == IncidentStatus.VERIFIED) {
+                incident.state().requireTransition(IncidentStatus.CLOSED, com.bits.itsm.incident.state.LifecycleActor.SYSTEM);
+                incident.close();
+                record(incident, system, "AUTO_CLOSED", "Automatically closed by the system.", "VERIFIED");
+                closed++;
+            }
+        }
+        return closed;
+    }
+    private void record(Incident incident, User actor, String action, String description, String previous) {
+        incident.record(actor, action, description, STUDENT_VISIBLE);
+        incidents.flush();
+        events.publish(incident.getId(), null, action, previous, incident.getStatus().name(), description);
+    }
     private View finish(Incident incident, User actor, String action, String description) {
         incident.record(actor, action, description, STUDENT_VISIBLE);
         incidents.flush();
@@ -215,8 +339,15 @@ public class IncidentService {
             case "RESOLVED" -> "IN_PROGRESS";
             case "VERIFIED", "ISSUE_STILL_EXISTS" -> "RESOLVED";
             case "CLOSED" -> "VERIFIED";
+            case "INFORMATION_REQUESTED" -> "IN_PROGRESS";
+            case "STUDENT_REPLIED" -> "AWAITING_INFO";
             default -> incident.getStatus().name();
         };
+        // Defence in depth: the state's transition table must also allow this actor (rolls back otherwise).
+        IncidentStatus from = IncidentStatus.valueOf(previous);
+        if (from != incident.getStatus()) {
+            com.bits.itsm.incident.state.IncidentLifecycle.of(from).requireTransition(incident.getStatus(), com.bits.itsm.incident.state.LifecycleActor.of(actor.getRole()));
+        }
         events.publish(incident.getId(), actor.getId(), action, previous, incident.getStatus().name(), description);
         return view(incident, actor);
     }
@@ -234,7 +365,7 @@ public class IncidentService {
                 i.getCreatedAt(), i.getUpdatedAt(), i.getAcknowledgedAt(), i.getResolvedAt(), i.getVerifiedAt(), i.getClosedAt(),
                 i.getResolutionSummary(), i.getResolutionSteps(), notes, history, f == null ? null : new FeedbackView(f.getRating(), f.getComment(), f.getCreatedAt()),
                 user.getRole() == Role.TECHNICIAN && i.isPrimary(user.getId()), student ? List.of() : i.getCollaborators().stream()
-                    .map(c -> new TeamMember(person(c.getTechnician()), c.getResponsibility())).toList(), categories.suggest(i.getTitle(), i.getDescription()), i.getCriticality(), i.getResponseDeadline(), i.getResolutionDeadline(), i.responseSla(java.time.Instant.now()), i.resolutionSla(java.time.Instant.now()),
+                    .map(c -> new TeamMember(person(c.getTechnician()), c.getResponsibility())).toList(), categories.suggest(i.getTitle(), i.getDescription()), i.getCriticality(), i.getResponseDeadline(), i.getResolutionDeadline(), i.responseSla(java.time.Instant.now()), i.resolutionSla(java.time.Instant.now()), i.isSlaPaused(), i.getSlaPausedSeconds(), i.getAffectedUsers(), i.getSlaFactor(),
                 i.isNeedsClassificationReview(), i.isAutoClassified(), i.getClassificationNotes());
     }
 }

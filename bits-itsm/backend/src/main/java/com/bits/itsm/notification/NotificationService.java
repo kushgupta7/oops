@@ -24,11 +24,11 @@ public class NotificationService implements IncidentObserver {
     private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     private final IncidentLookup lookup;
-    private final List<NotificationChannel> channels;
+    private final NotificationChannelFactory channels;
 
     public NotificationService(IncidentLookup lookup, List<NotificationChannel> channels) {
         this.lookup = lookup;
-        this.channels = List.copyOf(channels);
+        this.channels = new NotificationChannelFactory(channels);
     }
 
     @Override
@@ -36,7 +36,7 @@ public class NotificationService implements IncidentObserver {
         RuntimeException failure = null;
         for (Long recipient : recipientsFor(e)) {
             Notification n = NotificationFactory.create(e, recipient);
-            for (NotificationChannel channel : channels) {
+            for (NotificationChannel channel : channels.channelsFor(n)) {
                 try {
                     channel.send(n);
                 } catch (RuntimeException ex) {
@@ -65,13 +65,13 @@ public class NotificationService implements IncidentObserver {
                 add(to, reporter);
                 to.addAll(admins);
             }
-            case INCIDENT_CLASSIFIED, PRIORITY_CHANGED, INCIDENT_ACKNOWLEDGED, INCIDENT_RESOLVED -> add(to, reporter);
+            case INCIDENT_CLASSIFIED, PRIORITY_CHANGED, INCIDENT_ACKNOWLEDGED, INCIDENT_RESOLVED, INFORMATION_REQUESTED -> add(to, reporter);
             case INCIDENT_ASSIGNED, INCIDENT_CLOSED, INCIDENT_UPDATED -> add(to, reporter, technician);
             case SLA_WARNING, SLA_BREACHED, INCIDENT_ESCALATED -> {
                 add(to, technician);
                 to.addAll(admins);
             }
-            case DUPLICATE_DETECTED -> to.addAll(admins);
+            case DUPLICATE_DETECTED, MAJOR_INCIDENT_DETECTED -> to.addAll(admins);
         }
         if (e.actorId() != null) {
             to.remove(e.actorId());

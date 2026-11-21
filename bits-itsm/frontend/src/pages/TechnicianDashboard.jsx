@@ -3,6 +3,8 @@ import LiveIncidents from '../LiveIncidents.jsx';
 import AssignmentManagement from '../AssignmentManagement.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import Button27 from '../components/ui/button-27.jsx';
+import NavIcon from '../components/NavIcon.jsx';
+import { TechnicianFocus, Welcome } from '../HomePanels.jsx';
 import TechnicianOperations, { operationLabels } from './TechnicianOperations.jsx';
 import { KnowledgeBase, NotificationCenter, SavedKnowledge } from './TechnicianResources.jsx';
 import { incidentStatuses, readableLabel } from '../MyIncidents.jsx';
@@ -69,7 +71,7 @@ function SlaAttention({ incidents, onView, onAction }) {
 function DashboardHome({ incidents, technician, workload, onView, onAction, onNavigate }) {
   const active = incidents.filter(isActive);
   const pending = active.filter((incident) => incident.status === 'ASSIGNED');
-  const inProgress = active.filter((incident) => ['ACKNOWLEDGED', 'IN_PROGRESS'].includes(incident.status));
+  const inProgress = active.filter((incident) => ['ACKNOWLEDGED', 'IN_PROGRESS', 'AWAITING_INFO'].includes(incident.status));
   const highPriority = active.filter((incident) => ['P1', 'P2'].includes(incident.priority));
   const atRisk = active.filter((incident) => incident.slaStatus === 'AT_RISK');
   const summary = [
@@ -83,7 +85,7 @@ function DashboardHome({ incidents, technician, workload, onView, onAction, onNa
   const slaAlerts = workload.active.filter((incident) => ['AT_RISK', 'BREACHED'].includes(incident.slaStatus));
 
   return <>
-    <section className="dashboard-welcome"><div><h2>Welcome back, Technician!</h2><p>Manage assigned IT incidents, track priorities, and monitor your support workload.</p></div></section>
+    <section className="dashboard-welcome"><div><h2>Welcome back, {technician.name.split(' ')[0]}!</h2><p>Manage assigned IT incidents, track priorities, and monitor your support workload.</p></div></section>
     <SummaryCards items={summary} label="Technician incident summary" />
     <p className="report-guidance">Primary assignments only. Pending: Assigned. In progress: Acknowledged or In Progress. Resolved: Resolved, Verified or Closed. High priority: active P1/P2. SLA at risk: active AT_RISK. Priority and SLA counts can overlap with status counts.</p>
     <section className="technician-section" aria-label="Quick Actions"><div className="report-actions">{[['assigned', 'View Assigned Incidents'], ['workload', 'View My Workload'], ['transfers', 'View Transfer Requests'], ['knowledge', 'Open Knowledge Base'], ['notifications', 'View Notifications']].map(([page, label]) => <button key={page} type="button" className="report-clear" onClick={() => onNavigate(page)}>{label}</button>)}</div></section>
@@ -283,7 +285,7 @@ function MyWorkload({ technician, workload, onView, onAction }) {
   const transferIncident = primary.find((incident) => incident.id === transferId);
   const summary = [
     ['Total Active Incidents', workload.active.length], ['Pending Acknowledgment', primary.filter((incident) => incident.status === 'ASSIGNED').length],
-    ['In Progress', workload.active.filter((incident) => ['ACKNOWLEDGED', 'IN_PROGRESS'].includes(incident.status)).length],
+    ['In Progress', workload.active.filter((incident) => ['ACKNOWLEDGED', 'IN_PROGRESS', 'AWAITING_INFO'].includes(incident.status)).length],
     ['High-Priority Incidents', workload.active.filter((incident) => ['P1', 'P2'].includes(incident.priority)).length],
     ['Collaborating Incidents', collaborating.length], ['Resolved Incidents', workload.participating.filter((incident) => !isActive(incident)).length],
   ];
@@ -387,7 +389,8 @@ export default function TechnicianDashboard({ incidents = demoIncidents, session
 
   if (sessionUser && page === 'knowledge') content = <SavedKnowledge />;
   if (sessionUser && page === 'notifications') content = <Notifications live role="TECHNICIAN" />;
-  if (sessionUser && ['dashboard', 'assigned', 'investigation'].includes(page)) content = <LiveIncidents role="TECHNICIAN" team={page === 'investigation'} />;
+  if (sessionUser && ['assigned', 'investigation'].includes(page)) content = <LiveIncidents role="TECHNICIAN" team={page === 'investigation'} />;
+  if (sessionUser && page === 'dashboard') content = <><Welcome user={sessionUser} subtitle="Your assigned incidents, ranked by what needs you first." /><TechnicianFocus /><LiveIncidents role="TECHNICIAN" /></>;
   if (sessionUser && page === 'team') content = <><LiveIncidents role="TECHNICIAN" team /><AssignmentManagement mode="collaboration" role="TECHNICIAN" userId={sessionUser.id} /></>;
   if (sessionUser && ['transfers', 'workload'].includes(page)) content = <AssignmentManagement key={page} mode={page === 'transfers' ? 'transfer' : 'workload'} role="TECHNICIAN" userId={sessionUser.id} />;
 
@@ -395,7 +398,7 @@ export default function TechnicianDashboard({ incidents = demoIncidents, session
     <aside className="dashboard-sidebar" id="technician-sidebar" hidden={!isMenuOpen}>
       <div className="dashboard-brand"><span className="brand-name">BITSolve</span><span className="brand-caption">Technician Portal</span></div>
       <nav aria-label="Technician navigation">
-        {Object.entries(pages).map(([value, label]) => <button key={value} type="button" className={(page === 'details' ? returnPage : page) === value ? 'dashboard-nav-active' : ''} aria-current={(page === 'details' ? returnPage : page) === value ? 'page' : undefined} onClick={() => navigate(value)}>{label}</button>)}
+        {Object.entries(pages).map(([value, label]) => <button key={value} type="button" className={(page === 'details' ? returnPage : page) === value ? 'dashboard-nav-active' : ''} aria-current={(page === 'details' ? returnPage : page) === value ? 'page' : undefined} onClick={() => navigate(value)}><NavIcon name={label} /><span>{label}</span></button>)}
       </nav>
       <p className="dashboard-sidebar-note">BITS Pilani<br />Hyderabad Campus</p>
     </aside>

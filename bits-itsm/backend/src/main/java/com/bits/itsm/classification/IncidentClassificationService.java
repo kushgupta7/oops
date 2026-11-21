@@ -250,7 +250,9 @@ public class IncidentClassificationService {
         }
 
         Level criticality = entry.getCriticality();
-        Priority calculated = priorities.current().calculator().calculate(impact, urgency, criticality);
+        Priority base = priorities.current().calculator().calculate(impact, urgency, criticality);
+        // Brief: number of affected users is a priority factor (more than 100 people raises one level).
+        Priority calculated = com.bits.itsm.priority.AffectedUsersRule.apply(base, incident.getAffectedUsers());
 
         incident.applyAutoClassification(category, detectedService, impact, urgency, criticality, calculated);
         slaPolicies.capture(incident);
@@ -258,7 +260,9 @@ public class IncidentClassificationService {
         String strategyName = priorities.current().getStrategy().name();
         String desc = "Automatically classified using " + strategyName + " model. Service: " + detectedService.getLabel()
                 + ", Category: " + category + ", Impact: " + impact + ", Urgency: " + urgency
-                + ", Criticality: " + criticality + " -> Priority: " + calculated;
+                + ", Criticality: " + criticality + " -> Priority: " + calculated
+                + (calculated != base ? " (raised from " + base + ": " + incident.getAffectedUsers() + " people affected)" : "")
+                + (slaFactor(entry) != 1.0 ? ", service SLA factor x" + slaFactor(entry) : "");
 
         audit.save(new AuditRecord("AUD-" + UUID.randomUUID(), Instant.now(), null, incident.getId(),
                 "AUTO_CLASSIFIED", "PENDING", calculated.name(), desc));
@@ -282,7 +286,8 @@ public class IncidentClassificationService {
         Level criticality = entry.getCriticality();
 
         Category finalCategory = category != null ? category : determineCategory(incident.getTitle(), incident.getDescription(), service);
-        Priority calculated = priorities.current().calculator().calculate(impact, urgency, criticality);
+        Priority calculated = com.bits.itsm.priority.AffectedUsersRule.apply(
+                priorities.current().calculator().calculate(impact, urgency, criticality), incident.getAffectedUsers());
 
         String previousPriority = incident.getPriority() != null ? incident.getPriority().name() : "PENDING";
         incident.adminClassify(finalCategory, service, impact, urgency, criticality, calculated);
@@ -290,7 +295,7 @@ public class IncidentClassificationService {
         // Recalculate SLA targets
         SlaPolicy slaPolicy = slaPolicyRepo.findById(calculated).orElse(null);
         if (slaPolicy != null) {
-            incident.resetSla(slaPolicy);
+            incident.resetSla(slaPolicy, slaFactor(entry));
         }
 
         String strategyName = priorities.current().getStrategy().name();
@@ -306,5 +311,11 @@ public class IncidentClassificationService {
                 InvestigationNote.Visibility.STUDENT_VISIBLE);
 
         return incident;
+    }
+
+    /** Service SLA factor (1.0 = standard). Values outside the allowed range are treated as standard. */
+    static double slaFactor(CatalogEntry entry) {
+        double f = entry.getSlaFactor();
+        return Double.isFinite(f) && f >= 0.25 && f <= 4.0 ? f : 1.0;
     }
 }

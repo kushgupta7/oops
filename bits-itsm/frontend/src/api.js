@@ -6,12 +6,21 @@ export function onSessionExpired(callback) {
   return () => sessionEvents.removeEventListener('expired', callback);
 }
 
+const RETRY_DELAY_MS = 700;
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function apiRequest(path, options = {}) {
   let response;
-  try {
-    response = await fetch(`/api/${path}`, { ...options, credentials: 'include' });
-  } catch {
-    throw new Error('Unable to connect to the BITSolve server.');
+  // Reads are idempotent, so one automatic retry hides a brief network glitch; writes are never retried.
+  const attempts = !options.method || options.method === 'GET' ? 2 : 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      response = await fetch(`/api/${path}`, { ...options, credentials: 'include' });
+      break;
+    } catch {
+      if (attempt >= attempts) throw new Error('Unable to connect to the BITSolve server. Check your connection and try again.');
+      await wait(RETRY_DELAY_MS);
+    }
   }
   const data = await response.json().catch(() => null);
   if (response.status === 401 && path !== 'auth/login' && path !== 'auth/me') {
@@ -25,11 +34,11 @@ export async function apiRequest(path, options = {}) {
   return data;
 }
 
-export async function apiSend(path, body, method = 'POST') {
+export async function apiSend(path, body, method = 'POST', extraHeaders = {}) {
   const csrf = await apiRequest('auth/csrf');
   return apiRequest(path, {
     method,
-    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders, [csrf.headerName]: csrf.token },
     body: body ? JSON.stringify(body) : undefined,
   });
 }

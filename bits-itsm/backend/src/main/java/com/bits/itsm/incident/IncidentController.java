@@ -14,12 +14,17 @@ public class IncidentController {
     public IncidentController(IncidentService service) { this.service = service; }
     @GetMapping("/options") public Options options(Authentication auth) { return service.options(auth.getName()); }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
-    public View create(@Valid @RequestBody Create request, Authentication auth) { return service.create(request, auth.getName()); }
+    public View create(@Valid @RequestBody Create request, Authentication auth,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) { return service.create(request, auth.getName(), idempotencyKey); }
     @GetMapping({"", "/my"})
     public List<View> list(Authentication auth, jakarta.servlet.http.HttpServletRequest request,
             @RequestParam(required = false) String search, @RequestParam(required = false) IncidentStatus status,
-            @RequestParam(required = false) Incident.Category category, @RequestParam(required = false) Incident.Priority priority) {
-        return service.list(auth.getName(), request.getRequestURI().endsWith("/my"), search, status, category, priority);
+            @RequestParam(required = false) Incident.Category category, @RequestParam(required = false) Incident.Priority priority,
+            @RequestParam(name = "service", required = false) Incident.ItService affectedService, @RequestParam(required = false) Long technician,
+            @RequestParam(required = false) String from, @RequestParam(required = false) String to,
+            @RequestParam(required = false) SlaClock.Status sla) {
+        return service.list(auth.getName(), request.getRequestURI().endsWith("/my"),
+                new IncidentService.SearchCriteria(search, status, category, priority, affectedService, technician, from, to, sla));
     }
     @GetMapping("/{id}") public View get(@PathVariable Long id, Authentication auth) { return service.get(id, auth.getName()); }
     @PostMapping("/{id}/edit") public View edit(@PathVariable Long id, @Valid @RequestBody Edit request, Authentication auth) { return service.edit(id, request, auth.getName()); }
@@ -29,6 +34,7 @@ public class IncidentController {
     @PostMapping("/{id}/start") public View start(@PathVariable Long id, Authentication auth) { return service.start(id, auth.getName()); }
     @PostMapping("/{id}/notes") public View note(@PathVariable Long id, @Valid @RequestBody Note request, Authentication auth) { return service.note(id, request, auth.getName()); }
     @PostMapping("/{id}/information") public View information(@PathVariable Long id, @Valid @RequestBody Message request, Authentication auth) { return service.information(id, request, auth.getName(), false); }
+    @PostMapping("/{id}/comment") public View addInformation(@PathVariable Long id, @Valid @RequestBody Message request, Authentication auth) { return service.addInformation(id, request, auth.getName()); }
     @PostMapping("/{id}/reply") public View reply(@PathVariable Long id, @Valid @RequestBody Message request, Authentication auth) { return service.information(id, request, auth.getName(), true); }
     @PostMapping("/{id}/resolve") public View resolve(@PathVariable Long id, @Valid @RequestBody Resolution request, Authentication auth) { return service.resolve(id, request, auth.getName()); }
     @PostMapping("/{id}/verify") public View verify(@PathVariable Long id, @Valid @RequestBody Verification request, Authentication auth) { return service.verify(id, request, auth.getName()); }

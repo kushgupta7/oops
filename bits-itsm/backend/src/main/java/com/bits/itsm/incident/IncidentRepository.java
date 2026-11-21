@@ -11,12 +11,15 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     List<Incident> findByReporterIdOrderByCreatedAtDesc(Long reporterId);
     List<Incident> findByAssignedTechnicianIdOrderByCreatedAtDesc(Long technicianId);
     List<Incident> findAllByOrderByCreatedAtDesc();
+    List<Incident> findByStatusInAndUpdatedAtBefore(java.util.Collection<IncidentStatus> statuses, java.time.Instant cutoff);
     @Query("select distinct i from Incident i left join i.collaborators c where i.assignedTechnician.id = :id or c.technician.id = :id order by i.createdAt desc")
     List<Incident> findTeamIncidents(Long id);
     @Query("select i.assignedTechnician.id, i.status, i.priority, count(i) from Incident i where i.assignedTechnician is not null group by i.assignedTechnician.id, i.status, i.priority")
     List<Object[]> primaryWorkloads();
     @Query("select c.technician.id, i.status, i.priority, count(distinct i.id) from Incident i join i.collaborators c group by c.technician.id, i.status, i.priority")
     List<Object[]> collaborationWorkloads();
+    @Query("select i.assignedTechnician.id, count(i) from Incident i where i.assignedTechnician is not null and i.affectedService = :service and i.status in (com.bits.itsm.incident.IncidentStatus.RESOLVED, com.bits.itsm.incident.IncidentStatus.VERIFIED, com.bits.itsm.incident.IncidentStatus.CLOSED) group by i.assignedTechnician.id")
+    List<Object[]> resolvedByTechnicianForService(Incident.ItService service);
     // Serialize lifecycle actions and feedback submissions for one incident.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Incident i where i.id = :id")

@@ -12,6 +12,8 @@ public class CatalogEntry {
     @Enumerated(EnumType.STRING) private Incident.Level criticality;
     @Column(length = 2000) private String keywords;
 
+    // Multiplies the priority SLA targets for this service: 0.5 = twice as fast, 2.0 = twice as long.
+    @Column(nullable = false) private double slaFactor = 1.0;
     protected CatalogEntry() { }
     public String getId() { return id; }
     public String getKind() { return kind; }
@@ -21,6 +23,12 @@ public class CatalogEntry {
     public Incident.Level getCriticality() { return criticality; }
     public String getKeywords() { return keywords; }
 
+    public double getSlaFactor() { return slaFactor; }
+    public void configureSla(double factor) {
+        if (!"SERVICE".equals(kind)) throw new IllegalArgumentException("Only IT services have an SLA factor.");
+        if (!Double.isFinite(factor) || factor < 0.25 || factor > 4.0) throw new IllegalArgumentException("SLA factor must be between 0.25 and 4.");
+        slaFactor = factor;
+    }
     public void update(String label, boolean enabled, Incident.Level criticality) {
         update(label, enabled, criticality, this.keywords);
     }

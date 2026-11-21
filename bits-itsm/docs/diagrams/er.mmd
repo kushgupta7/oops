@@ -1,0 +1,78 @@
+erDiagram
+  APP_USERS ||--o{ INCIDENTS : "reports (reporter_id)"
+  APP_USERS ||--o{ INCIDENTS : "owns (assigned_technician_id)"
+  APP_USERS ||--o{ TECHNICIAN_SKILLS : has
+  INCIDENTS ||--o{ INVESTIGATION_NOTES : contains
+  INCIDENTS ||--o{ INCIDENT_HISTORY : "records"
+  INCIDENTS ||--o| INCIDENT_FEEDBACK : receives
+  INCIDENTS ||--o{ INCIDENT_COLLABORATORS : "team"
+  APP_USERS ||--o{ INCIDENT_COLLABORATORS : joins
+  INCIDENTS ||--o{ TRANSFER_REQUESTS : ""
+  INCIDENTS ||--o{ COLLABORATION_REQUESTS : ""
+  INCIDENTS ||--o{ SCHEDULED_EVENTS : "SLA / escalation / major"
+  INCIDENTS ||--o{ AUDIT_EVENTS : "audited (by id)"
+  INCIDENTS ||--o{ NOTIFICATION_DELIVERIES : "about"
+  APP_USERS ||--o{ NOTIFICATION_DELIVERIES : "recipient"
+  SLA_POLICIES ||..o{ INCIDENTS : "targets captured"
+  CATALOG_ENTRIES ||..o{ INCIDENTS : "service / category code"
+  APP_USERS {
+    bigint id PK
+    varchar role "ADMIN|STUDENT|TECHNICIAN (discriminator)"
+    varchar email UK
+    varchar password_hash "BCrypt"
+    varchar name
+    boolean enabled
+    varchar availability
+    int max_workload
+    varchar student_number
+  }
+  INCIDENTS {
+    bigint id PK
+    varchar title
+    varchar description
+    bigint reporter_id FK
+    bigint assigned_technician_id FK
+    varchar category
+    varchar affected_service
+    varchar impact
+    varchar urgency
+    varchar priority "PENDING|P1..P4"
+    varchar status "9 lifecycle states"
+    varchar criticality "captured"
+    timestamptz created_at
+    timestamptz acknowledged_at
+    timestamptz resolved_at
+    timestamptz response_deadline
+    timestamptz resolution_deadline
+    timestamptz sla_paused_at
+    bigint sla_paused_seconds
+    varchar resolution_summary
+  }
+  SLA_POLICIES {
+    varchar priority PK
+    int response_minutes
+    int resolution_minutes
+  }
+  CATALOG_ENTRIES {
+    varchar id PK
+    varchar kind "SERVICE|CATEGORY"
+    varchar code
+    varchar label
+    boolean enabled
+    varchar criticality
+  }
+  AUDIT_EVENTS {
+    varchar id PK
+    timestamptz timestamp
+    bigint actor_id
+    bigint incident_id
+    varchar action
+    varchar previous
+    varchar next
+  }
+  SCHEDULED_EVENTS {
+    varchar id PK "dedup key e.g. 12:ESCALATION:2"
+    bigint incident_id FK
+    varchar type
+    varchar next_level
+  }

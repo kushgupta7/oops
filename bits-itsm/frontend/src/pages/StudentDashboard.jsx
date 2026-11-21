@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import ReportIncident from '../ReportIncident.jsx';
 import Button27 from '../components/ui/button-27.jsx';
+import NavIcon from '../components/NavIcon.jsx';
+import { Welcome } from '../HomePanels.jsx';
 import Notifications from '../Notifications.jsx';
 import LiveIncidents from '../LiveIncidents.jsx';
 import MyIncidents, { IncidentSummary, incidentStatuses, readableLabel } from '../MyIncidents.jsx';
@@ -25,12 +27,12 @@ export default function StudentDashboard({ incidents: allIncidents = sampleIncid
           <span className="brand-caption">Smart Campus IT Support</span>
         </div>
         <nav aria-label="Student navigation">
-          <button type="button" className={page === 'dashboard' ? 'dashboard-nav-active' : ''} aria-current={page === 'dashboard' ? 'page' : undefined} onClick={() => navigate('dashboard')}>Dashboard</button>
-          <button type="button" className={page === 'report' ? 'dashboard-nav-active' : ''} aria-current={page === 'report' ? 'page' : undefined} onClick={() => navigate('report')}>Report Incident</button>
-          <button type="button" className={page === 'incidents' ? 'dashboard-nav-active' : ''} aria-current={page === 'incidents' ? 'page' : undefined} onClick={() => navigate('incidents')}>My Incidents</button>
+          <button type="button" className={page === 'dashboard' ? 'dashboard-nav-active' : ''} aria-current={page === 'dashboard' ? 'page' : undefined} onClick={() => navigate('dashboard')}><NavIcon name="Dashboard" /><span>Dashboard</span></button>
+          <button type="button" className={page === 'report' ? 'dashboard-nav-active' : ''} aria-current={page === 'report' ? 'page' : undefined} onClick={() => navigate('report')}><NavIcon name="Report Incident" /><span>Report Incident</span></button>
+          <button type="button" className={page === 'incidents' ? 'dashboard-nav-active' : ''} aria-current={page === 'incidents' ? 'page' : undefined} onClick={() => navigate('incidents')}><NavIcon name="My Incidents" /><span>My Incidents</span></button>
           {['Notifications', 'Profile'].map((label) => (
             <button key={label} type="button" className={page === label.toLowerCase() ? 'dashboard-nav-active' : ''} aria-current={page === label.toLowerCase() ? 'page' : undefined} onClick={() => navigate(label.toLowerCase())}>
-              <span>{label}</span>
+              <NavIcon name={label} /><span>{label}</span>
             </button>
           ))}
         </nav>
@@ -56,11 +58,12 @@ export default function StudentDashboard({ incidents: allIncidents = sampleIncid
           </div>}
 
           {!sessionUser && <div className="report-field technician-selector"><label htmlFor="demo-student">Demo student (preview only)</label><select id="demo-student" value={studentId} onChange={(event) => { setStudentId(event.target.value); navigate('dashboard'); }}>{users.filter((user) => user.role === 'STUDENT').map((user) => <option key={user.id} value={user.id}>{user.name} ({user.studentId})</option>)}</select></div>}
+          {sessionUser && page === 'dashboard' && <Welcome user={sessionUser} subtitle="Report a problem or follow up on your requests." action={<button className="dashboard-report" type="button" onClick={() => navigate('report')}>Report New Incident</button>} />}
           {sessionUser && ['dashboard', 'incidents'].includes(page) ? <LiveIncidents role="STUDENT" initialIncidentId={Number(new URLSearchParams(window.location.search).get('incident')) || undefined} /> : <>
           {page === 'report' ? <ReportIncident live={Boolean(sessionUser)} onCancel={() => navigate('dashboard')} /> : page === 'incidents' ? <MyIncidents key={studentId} incidents={incidents} initialIncidentId={selectedIncidentId} /> : page === 'notifications' ? <Notifications live={Boolean(sessionUser)} records={studentNotifications.filter((item) => item.studentId === studentId)} readIds={readIds} onRead={(id) => setReadIds((previous) => previous.includes(id) ? previous : [...previous, id])} canOpen={(item) => incidents.some((incident) => incident.id === item.incidentId)} onOpen={sessionUser ? undefined : (item) => { navigate('incidents'); setSelectedIncidentId(item.incidentId); }} /> : page === 'profile' ? <section className="report-form student-detail-section"><h2>Student Profile</h2><dl className="incident-details">{(sessionUser ? [['Name', sessionUser.name], ['Institutional Email', sessionUser.email], ['Role', sessionUser.role]] : [['Name', student.name], ['Student ID', student.studentId], ['Institutional Email', student.email], ['Reported Incidents', incidents.length]]).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p className="report-guidance">{sessionUser ? 'Read-only account details.' : 'Read-only sample profile.'}</p></section> : <>
           <section className="dashboard-welcome" aria-labelledby="dashboard-welcome-title">
             <div>
-              <h2 id="dashboard-welcome-title">Welcome back, Student!</h2>
+              <h2 id="dashboard-welcome-title">Welcome back, {student.name.split(' ')[0]}!</h2>
               <p>Manage and track your IT support requests in one place.</p>
             </div>
             <button className="dashboard-report" type="button" onClick={() => navigate('report')}>

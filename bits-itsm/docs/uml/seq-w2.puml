@@ -1,0 +1,33 @@
+@startuml seq-w2
+!include style.iuml
+title W2 — Investigate, request info (SLA paused), resolve, verify, feedback, close
+autonumber
+actor Technician
+actor Student
+participant IncidentService as IS
+participant "Incident\n(current IncidentState)" as INC
+participant "SlaMonitor\n@Scheduled" as SM
+participant EventBus as EB
+participant NotificationService as NS
+Technician -> IS : acknowledge
+IS -> INC : acknowledge() ASSIGNED → ACKNOWLEDGED
+Technician -> IS : start
+IS -> INC : start() → IN_PROGRESS
+SM -> SM : every N s: progress ≥ 80% ?
+SM -> EB : SLA_WARNING (once)
+EB -> NS : technician + admins (+ SMS on breach)
+Technician -> IS : POST /{id}/information
+IS -> INC : requestInformation() → AWAITING_INFO\nslaPausedAt = now
+IS -> EB : INFORMATION_REQUESTED → reporter notified
+SM -> SM : AWAITING_INFO → skip (clock paused)
+Student -> IS : POST /{id}/reply
+IS -> INC : informationReceived()\ndeadline += pause; → IN_PROGRESS
+Technician -> IS : resolve(summary, steps)
+IS -> INC : resolve() → RESOLVED
+IS -> EB : INCIDENT_RESOLVED → reporter notified (in-app + e-mail)
+Student -> IS : verify(confirmed = true)
+IS -> INC : verify() → VERIFIED
+Student -> IS : feedback(5, "Quick fix")
+IS -> INC : giveFeedback()
+note over IS, INC : Admin closes VERIFIED → CLOSED,\nor AutoCloseScheduler does it after 72 h (SYSTEM actor)
+@enduml

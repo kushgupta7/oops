@@ -2,6 +2,8 @@ package com.bits.itsm;
 
 import com.bits.itsm.incident.*;
 import com.bits.itsm.user.*;
+import com.bits.itsm.exception.InvalidStateTransitionException;
+import com.bits.itsm.exception.TechnicianUnavailableException;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,33 +17,33 @@ class IncidentWorkflowTests {
         assertEquals(IncidentStatus.CLOSED, i.getStatus());
         assertNotNull(i.getAcknowledgedAt()); assertNotNull(i.getResolvedAt()); assertNotNull(i.getVerifiedAt()); assertNotNull(i.getClosedAt());
         assertEquals(Incident.Priority.P2, i.getPriority());
-        assertThrows(IllegalStateException.class, i::start);
+        assertThrows(InvalidStateTransitionException.class, i::start);
     }
     @Test void rejectsSkippedTransitions() {
         Incident i = incident();
-        assertThrows(IllegalStateException.class, i::close);
-        assertThrows(IllegalStateException.class, i::verify);
-        assertThrows(IllegalStateException.class, i::acknowledge);
+        assertThrows(InvalidStateTransitionException.class, i::close);
+        assertThrows(InvalidStateTransitionException.class, i::verify);
+        assertThrows(InvalidStateTransitionException.class, i::acknowledge);
         i.classify(Incident.Category.NETWORK, Incident.Priority.P2); i.assign(technician);
-        assertThrows(IllegalStateException.class, () -> i.resolve("Fixed", "Tested"));
+        assertThrows(InvalidStateTransitionException.class, () -> i.resolve("Fixed", "Tested"));
     }
     @Test void rejectsBlankContentAndEmptyResolution() {
-        assertThrows(IllegalArgumentException.class, () -> new Incident(" ", "An incident description", student, Incident.Category.NETWORK, Incident.ItService.CAMPUS_WIFI, Incident.Level.LOW, Incident.Level.LOW));
+        assertThrows(com.bits.itsm.exception.InvalidIncidentException.class, () -> new Incident(" ", "An incident description", student, Incident.Category.NETWORK, Incident.ItService.CAMPUS_WIFI, Incident.Level.LOW, Incident.Level.LOW));
         Incident i = investigating();
-        assertThrows(IllegalArgumentException.class, () -> i.resolve(" ", "Tested"));
-        assertThrows(IllegalArgumentException.class, () -> i.resolve("Fixed", " "));
+        assertThrows(com.bits.itsm.exception.InvalidIncidentException.class, () -> i.resolve(" ", "Tested"));
+        assertThrows(com.bits.itsm.exception.InvalidIncidentException.class, () -> i.resolve("Fixed", " "));
         assertEquals(IncidentStatus.IN_PROGRESS, i.getStatus());
     }
     @Test void rejectsUnavailableAndDisabledTechnicians() {
         Incident i = incident(); i.classify(Incident.Category.NETWORK, Incident.Priority.P2); technician.setAvailable(false);
-        assertThrows(IllegalStateException.class, () -> i.assign(technician));
+        assertThrows(TechnicianUnavailableException.class, () -> i.assign(technician));
         technician.setAvailable(true); technician.setEnabled(false);
-        assertThrows(IllegalStateException.class, () -> i.assign(technician));
+        assertThrows(TechnicianUnavailableException.class, () -> i.assign(technician));
     }
     @Test void rejectedResolutionReturnsToInvestigation() {
         Incident i = investigating(); i.resolve("Fixed", "Tested"); i.issueStillExists();
         assertEquals(IncidentStatus.IN_PROGRESS, i.getStatus()); assertNull(i.getResolvedAt()); assertNull(i.getResolutionSummary());
-        assertThrows(IllegalStateException.class, i::verify);
+        assertThrows(InvalidStateTransitionException.class, i::verify);
         i.resolve("Fixed again", "Re-tested"); i.verify();
         assertEquals(IncidentStatus.VERIFIED, i.getStatus());
     }

@@ -3,7 +3,8 @@ import { apiRequest, apiPost } from './api.js';
 import { incidentCategories, services } from './demoData.js';
 import { readableLabel } from './MyIncidents.jsx';
 
-const emptyForm = { title: '', category: '', affectedService: '', description: '', impact: '', urgency: '' };
+const emptyForm = { title: '', category: '', affectedService: '', description: '', impact: '', urgency: '', affectedUsers: '' };
+const newSubmissionKey = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const validationNotice = 'Form validated successfully. Backend integration is pending. No incident has been saved.';
 
 // Provisional options; replace these with backend data when available.
@@ -28,6 +29,8 @@ export default function ReportIncident({ onCancel, live = false }) {
   const [validated, setValidated] = useState(false);
   const [options, setOptions] = useState(null);
   const [message, setMessage] = useState('');
+  // One key per report: a double click or network retry re-sends the same key and the server rejects the duplicate.
+  const [submissionKey, setSubmissionKey] = useState(newSubmissionKey);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -64,6 +67,9 @@ export default function ReportIncident({ onCancel, live = false }) {
       }
     });
 
+    if (form.affectedUsers !== '' && !(/^\d+$/.test(String(form.affectedUsers)) && Number(form.affectedUsers) >= 1 && Number(form.affectedUsers) <= 100000)) {
+      nextErrors.affectedUsers = 'Enter a whole number between 1 and 100000, or leave it empty.';
+    }
     if (!description) nextErrors.description = 'Please describe the issue.';
     else if (description.length < 20) nextErrors.description = 'Please provide at least 20 characters of detail.';
     else if (form.description.length > 2000) nextErrors.description = 'Keep the description within 2000 characters.';
@@ -80,9 +86,10 @@ export default function ReportIncident({ onCancel, live = false }) {
     if (!live) { setValidated(true); return; }
     setBusy(true); setMessage('');
     try {
-      const saved = await apiPost('incidents', { ...form, title, description });
+      const saved = await apiPost('incidents', { ...form, title, description, affectedUsers: form.affectedUsers === '' ? null : Number(form.affectedUsers) }, 'POST', { 'Idempotency-Key': submissionKey });
       setMessage(`Incident ${saved.id} saved successfully. Status: ${readableLabel(saved.status)}.`);
       setForm(emptyForm);
+      setSubmissionKey(newSubmissionKey());
       setValidated(true);
     } catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
@@ -119,7 +126,7 @@ export default function ReportIncident({ onCancel, live = false }) {
       </div>
 
       <form className="report-form" onSubmit={handleSubmit} onReset={clearForm} noValidate>
-        <p className="report-guidance">{live ? 'All fields are required. Priority is calculated during classification.' : 'All fields are required. Service options are provisional demo data.'}</p>
+        <p className="report-guidance">{live ? 'All fields except the number of affected people are required. Priority is calculated during classification.' : 'All fields are required. Service options are provisional demo data.'}</p>
         {live && !options && <p role="status">{message || 'Loading available categories and services…'} <button type="button" className="report-clear" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}
         <div className="report-field">
           <label htmlFor="incident-title">Incident Title</label>
@@ -140,7 +147,14 @@ export default function ReportIncident({ onCancel, live = false }) {
         </div>
 
         <div className="report-row">{dropdowns.slice(2).map(renderDropdown)}</div>
-        <p className="report-guidance">Priority will be calculated by the Java backend from impact and urgency.</p>
+        <div className="report-field">
+          <label htmlFor="incident-affected-users">How many people are affected? <span className="optional-label">(optional estimate)</span></label>
+          <input id="incident-affected-users" name="affectedUsers" type="number" inputMode="numeric" min="1" max="100000" step="1" value={form.affectedUsers} onChange={handleChange}
+            placeholder="e.g. 1 for just you, 200 for a whole hostel block" aria-invalid={Boolean(errors.affectedUsers)} aria-describedby="affected-hint affected-error" />
+          <p className="report-guidance" id="affected-hint">More than 100 people raises the priority by one level.</p>
+          <p className="report-error" id="affected-error" role="alert">{errors.affectedUsers}</p>
+        </div>
+        <p className="report-guidance">Priority is calculated by the server from impact, urgency, the service's business criticality and the number of people affected.</p>
 
         <div className="report-actions">
           <button className="submit-button" type="submit" disabled={busy || (live && !options)}>{busy ? 'Saving…' : 'Submit Incident'}</button>

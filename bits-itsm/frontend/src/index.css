@@ -303,3 +303,74 @@ button:focus-visible { outline: 3px solid #389ab8; outline-offset: 3px; }
 .auth-switch button { padding: 4px; border: 0; background: transparent; color: #286c82; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .auth-switch button:focus-visible { outline: 2px solid #3c8da4; outline-offset: 3px; }
 .auth-options button[aria-pressed="true"] { background: #203657; color: white; }
+
+/* Insights & Analytics (charts, correlation, SLA risk) */
+.insights { display: grid; gap: 18px; }
+.insights-toolbar a.incident-view { text-decoration: none; display: inline-flex; align-items: center; }
+.insights-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.insights-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.insights-section { min-width: 0; }
+.insights-body { padding: 0 22px 20px; }
+.insights-body .dashboard-table-scroll { margin: 0 -22px; }
+.assist-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 10px; }
+.assist-list button { margin-top: 6px; }
+.assist-reasons { color: #59728a; font-size: 13px; margin-top: 2px; }
+@media print {
+  .dashboard-sidebar, .dashboard-topbar, .dashboard-preview-note, .insights-toolbar, .dashboard-footer { display: none !important; }
+  .insights-grid { grid-template-columns: 1fr 1fr; }
+  .insights-section { break-inside: avoid; }
+}
+.insights-stack { display: grid; gap: 18px; }
+
+/* Inline text button (used by the admin major-incident banner) */
+.link-button { border: 0; background: none; padding: 0; color: #19536b; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ===== Role identity: each portal has its own sidebar colour, accent and badge ===== */
+.student-dashboard { --side: #0c3a46; --side-active: #14566a; --accent: #2bb3a3; --accent-ink: #0f6e64; --accent-soft: #e3f5f2; --role: 'Student portal'; }
+.student-dashboard.technician-portal { --side: #1f1d4d; --side-active: #34307a; --accent: #8f83f3; --accent-ink: #5a4fc7; --accent-soft: #eeecfd; --role: 'Technician portal'; }
+.student-dashboard.admin-portal { --side: #102b4e; --side-active: #224866; --accent: #e0a63a; --accent-ink: #94650f; --accent-soft: #fdf3e0; --role: 'Administrator portal'; }
+.student-dashboard .dashboard-sidebar { background: var(--side); }
+.student-dashboard .dashboard-sidebar nav .dashboard-nav-active { background: var(--side-active); color: #fff; box-shadow: inset 3px 0 var(--accent); }
+.student-dashboard .dashboard-sidebar nav button { justify-content: flex-start; gap: 12px; }
+.student-dashboard .dashboard-sidebar nav button:hover:not(.dashboard-nav-active) { background: #ffffff10; color: #fff; }
+.nav-icon { flex: none; opacity: .85; }
+.dashboard-nav-active .nav-icon { color: var(--accent); opacity: 1; }
+.admin-portal .dashboard-sidebar nav { gap: 2px; }
+.admin-portal .dashboard-sidebar nav button { min-height: 40px; padding: 9px 12px; }
+.nav-group { display: block; margin: 14px 12px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #ffffff70; }
+.nav-group:first-child { margin-top: 0; }
+.student-dashboard .dashboard-avatar { background: var(--accent-soft); color: var(--accent-ink); }
+.student-dashboard .dashboard-heading::after { content: var(--role); margin-left: 4px; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+.student-dashboard .dashboard-summary-card { border-top: 3px solid var(--accent); }
+.dashboard-summary-card.tone-danger { border-top-color: #c2414b; } .dashboard-summary-card.tone-danger p { color: #9c3843; }
+.dashboard-summary-card.tone-warn { border-top-color: #d59a1f; } .dashboard-summary-card.tone-warn p { color: #805d18; }
+.dashboard-summary-card.tone-ok { border-top-color: #3d9a63; }
+/* Heading receives focus programmatically for screen readers; it is not interactive, so no ring. */
+.technician-portal h1[tabindex="-1"]:focus, .technician-portal h2[tabindex="-1"]:focus { outline: none; }
+
+/* Role welcome banner */
+.role-welcome { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; padding: 26px 28px; border-radius: 14px; color: #fff;
+  background: radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--accent) 45%, transparent) 0, transparent 60%), var(--side); }
+.role-welcome h2 { margin: 4px 0 6px; font-size: 26px; letter-spacing: -.5px; }
+.role-welcome p { margin: 0; color: #ffffffcc; }
+.role-welcome-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); }
+.role-welcome .dashboard-report { background: #fff; color: var(--side); border-color: #fff; }
+.kpi-row { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 18px; }
+.home-panel { margin-bottom: 22px; }
+.risk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.risk-list li { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f6; }
+.risk-list li:last-child { border-bottom: 0; }
+.risk-list strong { display: block; font-size: 14px; }
+.risk-list span { font-size: 12.5px; color: #59728a; }
+.risk-dot { width: 10px; height: 10px; border-radius: 50%; }
+.risk-high { background: #c2414b; } .risk-medium { background: #d59a1f; } .risk-low { background: #3d9a63; }
+.major-banner { margin-bottom: 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid #f0c9cd; background: #fbecee; color: #7d2b33; }
+@media (max-width: 700px) {
+  .role-welcome { flex-direction: column; align-items: flex-start; }
+  .student-dashboard .dashboard-heading::after { display: none; }
+  .risk-list li { grid-template-columns: 10px 1fr; } .risk-list li > .admin-badge { grid-column: 2; justify-self: start; }
+}
+.role-welcome { margin-top: 18px; }
+.risk-list .admin-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.optional-label { font-weight: 400; color: #68788a; }
+.add-info-heading { margin: 18px 0 4px; font-size: 15px; }

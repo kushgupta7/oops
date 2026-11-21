@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import TechnicianOperations, { operationLabels } from './pages/TechnicianOperations.jsx';
 import { apiRequest } from './api.js';
+import { Recommendations, SuggestedResolutions } from './IncidentAssist.jsx';
 
 export default function IncidentManagementActions({ incident, role, options, onAction }) {
   const [action, setAction] = useState(null);
@@ -18,7 +19,7 @@ export default function IncidentManagementActions({ incident, role, options, onA
   }, [incident.id, role]);
   const [candidates, setCandidates] = useState([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const assignable = ['CLASSIFIED', 'ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(incident.status);
+  const assignable = ['CLASSIFIED', 'ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS', 'AWAITING_INFO'].includes(incident.status);
   useEffect(() => {
     if (role !== 'ADMIN' || !assignable) return;
     let active = true;
@@ -40,6 +41,8 @@ export default function IncidentManagementActions({ incident, role, options, onA
   }
   return <>
     {role === 'ADMIN' && <section className="student-detail-section"><h3>Related incident suggestions</h3><p>Rule-based text similarity; incidents are not merged automatically.</p>{related.length ? <ul>{related.map(item => <li key={item.incidentId}>Incident {item.incidentId}: {item.title} ({Math.round(item.similarity * 100)}% similar)</li>)}</ul> : <p>No related incidents found.</p>}</section>}
+    {role === 'ADMIN' && assignable && <Recommendations incident={incident} onPick={id => setTechnicianId(candidates.some(c => String(c.id) === id) ? id : '')} />}
+    {['ADMIN', 'TECHNICIAN'].includes(role) && !['NEW', 'RESOLVED', 'VERIFIED', 'CLOSED'].includes(incident.status) && <SuggestedResolutions incident={incident} role={role} />}
     {role === 'ADMIN' && (assignable || ['NEW', 'VERIFIED'].includes(incident.status)) && <form className="report-form" onSubmit={submit}>
       {incident.status === 'NEW' && incident.categorySuggestion && <p>Suggested category: <strong>{incident.categorySuggestion.category}</strong>. {incident.categorySuggestion.explanation}</p>}
       {incident.status === 'NEW' && <div className="report-field"><label htmlFor="classify-category">Confirm Category</label><select id="classify-category" value={category} onChange={event => setCategory(event.target.value)} required>{options.categories.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>}
@@ -47,7 +50,8 @@ export default function IncidentManagementActions({ incident, role, options, onA
       <div className="report-actions"><button className="incident-view" type="submit" disabled={busy || (assignable && !technicianId)}>{busy ? 'Saving…' : incident.status === 'NEW' ? 'Classify Incident' : assignable ? incident.status === 'CLASSIFIED' ? 'Assign Technician' : 'Reassign Technician' : 'Close Incident'}</button>
       {incident.status === 'CLASSIFIED' && <button className="incident-view" type="submit" value="auto" disabled={busy}>Automatically Assign</button>}</div>
     </form>}
-    {role === 'TECHNICIAN' && <div className="report-actions">{(incident.primaryOwner ? [...(incident.status === 'ASSIGNED' ? ['acknowledge'] : incident.status === 'ACKNOWLEDGED' ? ['start'] : incident.status === 'IN_PROGRESS' ? ['note', 'information', 'resolution'] : []), ...(['ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(incident.status) ? ['transfer', 'collaboration'] : [])] : incident.status === 'IN_PROGRESS' ? ['note'] : []).map(action => <button className="incident-view" key={action} onClick={() => setAction(action)}>{operationLabels[action]}</button>)}</div>}
+    {role === 'TECHNICIAN' && <div className="report-actions">{(incident.primaryOwner ? [...(incident.status === 'ASSIGNED' ? ['acknowledge'] : incident.status === 'ACKNOWLEDGED' ? ['start'] : incident.status === 'IN_PROGRESS' ? ['note', 'information', 'resolution'] : incident.status === 'AWAITING_INFO' ? ['note'] : []), ...(['ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS', 'AWAITING_INFO'].includes(incident.status) ? ['transfer', 'collaboration'] : [])] : ['IN_PROGRESS', 'AWAITING_INFO'].includes(incident.status) ? ['note'] : []).map(action => <button className="incident-view" key={action} onClick={() => setAction(action)}>{operationLabels[action]}</button>)}</div>}
+    {role === 'TECHNICIAN' && incident.status === 'AWAITING_INFO' && <p role="status">Waiting for the reporter's reply. The resolution SLA clock is paused.</p>}
     {error && <p className="report-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {action && <TechnicianOperations key={`${incident.id}-${action}`} incident={incident} action={action} onAction={onAction} onClose={() => setAction(null)} />}
   </>;

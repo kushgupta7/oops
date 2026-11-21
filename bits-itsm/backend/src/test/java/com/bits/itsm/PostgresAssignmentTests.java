@@ -145,7 +145,7 @@ class PostgresAssignmentTests {
         CountDownLatch start=new CountDownLatch(1);
         try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<Boolean>> results=new ArrayList<>();
-            for(long id:List.of(first,second)) results.add(executor.submit(()->{start.await();try{service.assign(id,tech("technician02"),false,email("admin01"));return true;}catch(IllegalStateException expected){return false;}}));
+            for(long id:List.of(first,second)) results.add(executor.submit(()->{start.await();try{service.assign(id,tech("technician02"),false,email("admin01"));return true;}catch(IllegalStateException | com.bits.itsm.exception.BitsolveException expected){return false;}}));
             start.countDown(); int successes=0;for(var result:results) if(result.get(15,TimeUnit.SECONDS))successes++;
             assertEquals(1,successes);
         }
@@ -156,7 +156,7 @@ class PostgresAssignmentTests {
         CountDownLatch start=new CountDownLatch(1);
         try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<Boolean>> results=new ArrayList<>();
-            for(int n=0;n<2;n++)results.add(executor.submit(()->{start.await();try{service.review(request,false,AssignmentRequest.Status.APPROVED,new AssignmentData.Review("Concurrent approval"),email("admin01"));return true;}catch(IllegalStateException expected){return false;}}));
+            for(int n=0;n<2;n++)results.add(executor.submit(()->{start.await();try{service.review(request,false,AssignmentRequest.Status.APPROVED,new AssignmentData.Review("Concurrent approval"),email("admin01"));return true;}catch(IllegalStateException | com.bits.itsm.exception.BitsolveException expected){return false;}}));
             start.countDown(); int successes=0;for(var result:results)if(result.get(15,TimeUnit.SECONDS))successes++;
             assertEquals(1,successes);
         }

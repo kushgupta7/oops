@@ -44,7 +44,11 @@ public class AdminManagementController {
     public record NewUser(@NotBlank @Size(max=100) String name, @NotBlank String email, @NotNull Role role,
             @NotBlank @Size(min=8,max=72) String password, @Size(max=30) String studentNumber, TechnicianSkill skill) { }
     public record UserEdit(@NotBlank @Size(max=100) String name, boolean enabled) { }
-    public record CatalogEdit(@NotBlank @Size(max=100) String label, boolean enabled, Incident.Level criticality, String keywords) { }
+    public record CatalogEdit(@NotBlank @Size(max=100) String label, boolean enabled, Incident.Level criticality, String keywords,
+            @jakarta.validation.constraints.DecimalMin("0.25") @jakarta.validation.constraints.DecimalMax("4.0") Double slaFactor) {
+        public CatalogEdit(String label, boolean enabled, Incident.Level criticality, String keywords) { this(label, enabled, criticality, keywords, null); }
+        public CatalogEdit(String label, boolean enabled, Incident.Level criticality) { this(label, enabled, criticality, null, null); }
+    }
     private UserView view(User user) { return new UserView(user.getId(), user.getName(), user.getEmail(), user.getRole(), user.isEnabled(), user instanceof Student student ? student.getStudentNumber() : null); }
     private void audit(Authentication auth, String action, String before, String after, String description) {
         Long actor = users.findByEmail(auth.getName()).filter(User::isEnabled).orElseThrow().getId();
@@ -58,11 +62,7 @@ public class AdminManagementController {
         if (request.role() == Role.STUDENT && (request.studentNumber() == null || request.studentNumber().isBlank())) throw new IllegalArgumentException("Student ID is required.");
         if (request.role() == Role.TECHNICIAN && request.skill() == null) throw new IllegalArgumentException("Select a technician skill.");
         String hash = passwords.encode(request.password());
-        User user = switch (request.role()) {
-            case STUDENT -> new Student(request.name().trim(), address, hash, request.studentNumber().trim());
-            case TECHNICIAN -> new Technician(request.name().trim(), address, hash, Objects.requireNonNull(request.skill(), "Select a technician skill.").name());
-            case ADMIN -> new Administrator(request.name().trim(), address, hash, "Campus IT administration");
-        };
+        User user = com.bits.itsm.user.UserFactory.create(request.role(), request.name(), address, hash, request.studentNumber(), request.skill());
         users.saveAndFlush(user); audit(auth, "USER_CREATED", null, user.getRole().name(), "Created account " + user.getId()); return view(user);
     }
     @PutMapping("/users/{id}") @Transactional public UserView update(@PathVariable Long id, @Valid @RequestBody UserEdit request, Authentication auth) {
@@ -76,9 +76,10 @@ public class AdminManagementController {
     @GetMapping("/catalog") public List<CatalogEntry> catalog() { return catalog.all(); }
     @PutMapping("/catalog/{kind}/{code}") @Transactional public CatalogEntry updateCatalog(@PathVariable String kind, @PathVariable String code, @Valid @RequestBody CatalogEdit request, Authentication auth) {
         CatalogEntry entry = catalog.get(kind, code);
-        String before = entry.getLabel() + ":" + entry.isEnabled() + ":" + entry.getCriticality() + ":" + entry.getKeywords();
+        String before = entry.getLabel() + ":" + entry.isEnabled() + ":" + entry.getCriticality() + ":" + entry.getKeywords() + ":x" + entry.getSlaFactor();
         entry = catalog.update(kind, code, request.label(), request.enabled(), request.criticality(), request.keywords());
-        audit(auth, "CATALOG_UPDATED", before, entry.getLabel() + ":" + entry.isEnabled() + ":" + entry.getCriticality() + ":" + entry.getKeywords(), entry.getId()); return entry;
+        if (request.slaFactor() != null) entry.configureSla(request.slaFactor());
+        audit(auth, "CATALOG_UPDATED", before, entry.getLabel() + ":" + entry.isEnabled() + ":" + entry.getCriticality() + ":" + entry.getKeywords() + ":x" + entry.getSlaFactor(), entry.getId()); return entry;
     }
     @GetMapping("/classification-settings")
     public ClassificationSettings classificationSettings() {

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bitsolve_test
+          POSTGRES_USER: bitsolve
+          POSTGRES_PASSWORD: bitsolve-ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bitsolve" --health-interval 5s --health-retries 20
+    defaults:
+      run:
+        working-directory: bits-itsm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: bits-itsm/frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: Frontend tests and build
+        working-directory: bits-itsm/frontend
+        run: npm ci && npm test && npm run build
+      - name: Backend tests (unit, MockMvc, PostgreSQL) with coverage
+        working-directory: bits-itsm/backend
+        env:
+          BITSOLVE_DB_TESTS: "true"
+          BITSOLVE_TEST_DB_URL: jdbc:postgresql://localhost:5432/bitsolve_test
+          DB_USER: bitsolve
+          DB_PASSWORD: bitsolve-ci
+          DEMO_USER_PASSWORD: ci-only-password-123
+        run: chmod +x mvnw && ./mvnw -B -ntp -Pcoverage verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-and-coverage-reports
+          path: |
+            bits-itsm/backend/target/surefire-reports
+            bits-itsm/backend/target/site/jacoco

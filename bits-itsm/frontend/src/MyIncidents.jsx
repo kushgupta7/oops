@@ -11,6 +11,7 @@ export const incidentStatuses = {
   ASSIGNED: { label: 'Assigned', group: 'in-progress' },
   ACKNOWLEDGED: { label: 'Acknowledged', group: 'in-progress' },
   IN_PROGRESS: { label: 'In Progress', group: 'in-progress' },
+  AWAITING_INFO: { label: 'Awaiting Info', group: 'in-progress' },
   RESOLVED: { label: 'Resolved', group: 'resolved' },
   VERIFIED: { label: 'Verified', group: 'resolved' },
   CLOSED: { label: 'Closed', group: 'resolved' },
@@ -39,7 +40,15 @@ export function IncidentSummary({ incidents }) {
   );
 }
 
-const emptyFilters = { search: '', status: '', priority: '', category: '', service: '', fromDate: '' };
+const emptyFilters = { search: '', status: '', priority: '', category: '', service: '', technician: '', sla: '', fromDate: '', toDate: '' };
+const SLA_ORDER = ['BREACHED', 'AT_RISK', 'ON_TRACK', 'MET'];
+// Overall SLA = the worse of the response and resolution clocks (same rule as the server's search API).
+export function overallSla(incident) {
+  if (incident.slaStatus) return incident.slaStatus;
+  const states = [incident.responseSla, incident.resolutionSla].filter(Boolean);
+  return states.length ? states.sort((a, b) => SLA_ORDER.indexOf(a) - SLA_ORDER.indexOf(b))[0] : '';
+}
+const technicianName = (incident) => typeof incident.assignedTechnician === 'string' ? incident.assignedTechnician : incident.assignedTechnician?.name || '';
 
 export default function MyIncidents({ incidents, initialIncidentId, liveRole, team, options, onAction }) {
   const [filters, setFilters] = useState(emptyFilters);
@@ -55,12 +64,15 @@ export default function MyIncidents({ incidents, initialIncidentId, liveRole, te
   const categories = [...new Set(incidents.map((incident) => incident.category))].sort();
   const query = filters.search.trim().toLowerCase();
   const filteredIncidents = incidents.filter((incident) =>
-    (String(incident.id).toLowerCase().includes(query) || incident.title.toLowerCase().includes(query)) &&
+    (String(incident.id).toLowerCase().includes(query.replace(/^inc-?/, '')) || incident.title.toLowerCase().includes(query) || (incident.description || '').toLowerCase().includes(query)) &&
     (!filters.status || incident.status === filters.status) &&
     (!filters.priority || incident.priority === filters.priority) &&
     (!filters.category || incident.category === filters.category) &&
     (!filters.service || incident.affectedService === filters.service) &&
-    (!filters.fromDate || incident.createdAt.slice(0, 10) >= filters.fromDate),
+    (!filters.technician || (filters.technician === 'UNASSIGNED' ? !technicianName(incident) : technicianName(incident) === filters.technician)) &&
+    (!filters.sla || overallSla(incident) === filters.sla) &&
+    (!filters.fromDate || incident.createdAt.slice(0, 10) >= filters.fromDate) &&
+    (!filters.toDate || incident.createdAt.slice(0, 10) <= filters.toDate),
   );
 
   function changeFilter(event) {
@@ -91,12 +103,12 @@ export default function MyIncidents({ incidents, initialIncidentId, liveRole, te
         <div><h2 id="my-incidents-title">{title}</h2><p>{liveRole ? 'View and manage the incidents available to your account.' : 'View and track all your reported IT support requests.'}</p></div>
       </div>
       <IncidentSummary incidents={incidents} />
-      <p className="report-guidance">Open: New, Classified. In progress: Assigned, Acknowledged, In Progress. Resolved: Resolved, Verified, Closed. {liveRole ? 'Priority is calculated when the administrator classifies an incident.' : "Counts include this demo student's incidents."}</p>
+      <p className="report-guidance">Open: New, Classified. In progress: Assigned, Acknowledged, Awaiting Info, In Progress. Resolved: Resolved, Verified, Closed. {liveRole ? 'Priority is calculated when the administrator classifies an incident.' : "Counts include this demo student's incidents."}</p>
 
       <div className="incident-filters" role="search" aria-label="Search and filter incidents">
         <div className="report-field">
           <label htmlFor="incident-search">Search incidents</label>
-          <input id="incident-search" type="search" name="search" placeholder="Incident ID or title" value={filters.search} onChange={changeFilter} />
+          <input id="incident-search" type="search" name="search" placeholder="Incident ID, title or description" value={filters.search} onChange={changeFilter} />
         </div>
         <div className="report-field">
           <label htmlFor="filter-status">Status</label>
@@ -120,7 +132,10 @@ export default function MyIncidents({ incidents, initialIncidentId, liveRole, te
           </select>
         </div>
         <div className="report-field"><label htmlFor="filter-service">Affected service</label><select id="filter-service" name="service" value={filters.service} onChange={changeFilter}><option value="">All services</option>{[...new Set(incidents.map(item => item.affectedService))].filter(Boolean).map(service => <option key={service} value={service}>{readableLabel(service)}</option>)}</select></div>
+        {liveRole !== 'STUDENT' && <div className="report-field"><label htmlFor="filter-technician">Technician</label><select id="filter-technician" name="technician" value={filters.technician} onChange={changeFilter}><option value="">All technicians</option><option value="UNASSIGNED">Unassigned</option>{[...new Set(incidents.map(technicianName))].filter(Boolean).sort().map(name => <option key={name} value={name}>{name}</option>)}</select></div>}
+        <div className="report-field"><label htmlFor="filter-sla">SLA status</label><select id="filter-sla" name="sla" value={filters.sla} onChange={changeFilter}><option value="">Any SLA status</option>{SLA_ORDER.map(state => <option key={state} value={state}>{readableLabel(state)}</option>)}</select></div>
         <div className="report-field"><label htmlFor="filter-date">Reported on or after</label><input id="filter-date" type="date" name="fromDate" value={filters.fromDate} onChange={changeFilter} /></div>
+        <div className="report-field"><label htmlFor="filter-date-to">Reported on or before</label><input id="filter-date-to" type="date" name="toDate" min={filters.fromDate || undefined} value={filters.toDate} onChange={changeFilter} /></div>
         <button type="button" className="report-clear" onClick={() => setFilters(emptyFilters)}>Clear Filters</button>
       </div>
 
@@ -164,7 +179,7 @@ export default function MyIncidents({ incidents, initialIncidentId, liveRole, te
           <dl className="incident-details">{[
             ['Incident ID', selectedIncident.id], ['Title', selectedIncident.title], ['Description', selectedIncident.description],
             ['Reporter', selectedIncident.reporter.name], ['Category', readableLabel(selectedIncident.category)], ['Affected Service', selectedIncident.serviceLabel],
-            ['Business criticality', readableLabel(selectedIncident.criticality)], ['Response SLA', readableLabel(selectedIncident.responseSla)], ['Resolution SLA', readableLabel(selectedIncident.resolutionSla)], ['Response deadline', selectedIncident.responseDeadline || 'Pending classification'], ['Resolution deadline', selectedIncident.resolutionDeadline || 'Pending classification'],
+            ['Business criticality', readableLabel(selectedIncident.criticality)], ['People affected', selectedIncident.affectedUsers ?? 'Not stated'], ...(selectedIncident.slaFactor && selectedIncident.slaFactor !== 1 ? [['Service SLA factor', `×${selectedIncident.slaFactor}`]] : []), ['Response SLA', readableLabel(selectedIncident.responseSla)], ['Resolution SLA', `${readableLabel(selectedIncident.resolutionSla)}${selectedIncident.slaPaused ? ' (clock paused)' : ''}`], ['Response deadline', selectedIncident.responseDeadline || 'Pending classification'], ['Resolution deadline', selectedIncident.resolutionDeadline || 'Pending classification'],
             ['Impact', readableLabel(selectedIncident.impact)], ['Urgency', readableLabel(selectedIncident.urgency)], ['Priority', readableLabel(selectedIncident.priority)],
             ['Status', readableLabel(selectedIncident.status)], ['Assigned Technician', selectedIncident.assignedTechnician?.name || 'Not assigned'],
             ...['createdAt', 'updatedAt', 'acknowledgedAt', 'resolvedAt', 'verifiedAt', 'closedAt'].filter(field => selectedIncident[field]).map(field => [field.replace(/([A-Z])/g, ' $1'), new Date(selectedIncident[field]).toLocaleString()]),

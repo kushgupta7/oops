@@ -1,0 +1,41 @@
+@startuml seq-w1
+!include style.iuml
+title W1 — Report → auto-categorise + prioritise → assign → notify
+autonumber
+actor Student
+participant "React UI" as UI
+participant IncidentController as IC
+participant IncidentService as IS
+participant CategorySuggester as CS
+participant DuplicateDetector as DD
+participant PriorityService as PS
+participant "PriorityStrategy\n(selected)" as PST
+participant AssignmentService as AS
+participant "AssignmentStrategies\n(Strategy + fallback)" as ASG
+participant EventBus as EB
+participant "NotificationService /\nAuditLogger / EmailChannel" as OBS
+actor Administrator
+Student -> UI : fill report form
+UI -> IC : POST /api/incidents
+IC -> IS : create(request, email)
+IS -> IS : new Incident(...) [state NEW]
+IS -> EB : publish(INCIDENT_CREATED)
+EB -> OBS : onEvent → audit, in-app + e-mail
+IS -> DD : check(id) — TF/Jaccard similarity
+DD --> EB : DUPLICATE_DETECTED (if any)
+IS -> CS : suggest(title, description)
+IS --> UI : View (category suggestion)
+Administrator -> IC : POST /{id}/classify
+IC -> IS : classify
+IS -> PS : calculate(impact, urgency, criticality)
+PS -> PST : calculate(...)
+PST --> PS : P1..P4
+IS -> IS : incident.classify(); captureSla(policy)\nNEW → CLASSIFIED (state checks edge + actor)
+IS -> EB : PRIORITY_CHANGED, CLASSIFIED
+Administrator -> AS : POST /{id}/auto-assign
+AS -> ASG : assignWithFallback(selected, incident, candidates)
+ASG --> AS : Outcome(technician, used, fallback?)
+AS -> AS : incident.assign(tech) CLASSIFIED → ASSIGNED
+AS -> EB : publish(AUTO_ASSIGNED)
+EB -> OBS : notify technician + reporter, audit
+@enduml

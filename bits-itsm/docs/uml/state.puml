@@ -1,0 +1,22 @@
+@startuml state
+!include style.iuml
+title Incident lifecycle — State pattern (one class per state)
+[*] --> NEW : Student reports
+NEW --> CLASSIFIED : classify [ADMIN]\npriority + SLA captured
+CLASSIFIED --> ASSIGNED : assign [ADMIN, SYSTEM]\nstrategy + fallback
+ASSIGNED --> ACKNOWLEDGED : acknowledge [TECHNICIAN]\nresponse SLA stops
+ACKNOWLEDGED --> IN_PROGRESS : start [TECHNICIAN]
+IN_PROGRESS --> AWAITING_INFO : request info [TECHNICIAN]\nresolution clock PAUSED
+AWAITING_INFO --> IN_PROGRESS : reply [STUDENT]\ndeadline += paused time
+IN_PROGRESS --> RESOLVED : resolve [TECHNICIAN]\nresolution SLA stops
+RESOLVED --> VERIFIED : verify [STUDENT]\nor 72 h idle [SYSTEM]
+RESOLVED --> IN_PROGRESS : still broken [STUDENT]
+VERIFIED --> CLOSED : close [ADMIN]\nor 72 h idle [SYSTEM]
+CLOSED --> [*]
+note right of NEW
+  Any other edge (e.g. NEW → CLOSED)
+  throws InvalidStateTransitionException (HTTP 409).
+  A permitted edge by the wrong role throws
+  UnauthorizedOperationException (HTTP 403).
+end note
+@enduml

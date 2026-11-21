@@ -1,13 +1,25 @@
 import AdminManagement from '../AdminManagement.jsx';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+// Charts are loaded only when the Insights page is opened.
+const Insights = lazy(() => import('../Insights.jsx'));
 import Button27 from '../components/ui/button-27.jsx';
+import NavIcon from '../components/NavIcon.jsx';
+import { AdminHome, Welcome } from '../HomePanels.jsx';
 import Notifications from '../Notifications.jsx';
 import LiveIncidents from '../LiveIncidents.jsx';
 import AssignmentManagement from '../AssignmentManagement.jsx';
 import { incidentStatuses, readableLabel } from '../MyIncidents.jsx';
 import { demoIncidents, users, technicians, technicianSkills, transferRequests, collaborationRequests, services, incidentCategories, slaPolicies, auditLogs, investigationNotes, adminNotifications, relatedIncidentExamples, recommendationExamples, isActive, technicianWorkload } from '../demoData.js';
 
-const pages = ['Dashboard', 'All Incidents', 'Assignment Requests', 'Collaboration Requests', 'Manage Technicians', 'Manage Users', 'IT Services', 'Incident Categories', 'SLA Policies', 'Assignment Strategies', 'Escalations', 'Reports & Analytics', 'Audit Logs', 'Notifications', 'Settings'];
+// Sidebar sections; every page appears exactly once.
+const navGroups = [
+  ['Overview', ['Dashboard', 'Insights & Analytics', 'All Incidents']],
+  ['Workflow', ['Assignment Requests', 'Collaboration Requests', 'Escalations']],
+  ['People', ['Manage Technicians', 'Manage Users']],
+  ['Configuration', ['IT Services', 'Incident Categories', 'SLA Policies', 'Assignment Strategies']],
+  ['Records', ['Reports & Analytics', 'Audit Logs', 'Notifications', 'Settings']],
+];
+const pages = ['Dashboard', 'Insights & Analytics', 'All Incidents', 'Assignment Requests', 'Collaboration Requests', 'Manage Technicians', 'Manage Users', 'IT Services', 'Incident Categories', 'SLA Policies', 'Assignment Strategies', 'Escalations', 'Reports & Analytics', 'Audit Logs', 'Notifications', 'Settings'];
 const person = (id) => users.find((user) => user.id === id)?.name || 'Unassigned';
 const incidentById = (id) => demoIncidents.find((incident) => incident.id === id);
 const technicianById = (id) => technicians.find((technician) => technician.id === id);
@@ -562,7 +574,9 @@ export default function AdminDashboard({ sessionUser, sessionNotice }) {
   if (sessionUser && managementPages.includes(page)) content = <AdminManagement key={page} page={page} />;
   if (sessionUser && page === 'Settings') content = <section className="report-form"><h2>System configuration</h2><p>Manage persisted priority and assignment strategies and SLA targets using their respective pages.</p><button className="incident-view" onClick={() => navigate('Assignment Strategies')}>Open Strategies</button></section>;
   if (sessionUser && page === 'Notifications') content = <Notifications live role="ADMIN" />;
-  if (sessionUser && ['Dashboard', 'All Incidents'].includes(page)) content = <LiveIncidents role="ADMIN" />;
+  if (page === 'Insights & Analytics') content = sessionUser ? <Suspense fallback={<p role="status">Loading charts…</p>}><Insights /></Suspense> : <section className="report-form"><h2>Sign in required</h2><p>Insights are computed by the Java backend from live data.</p></section>;
+  if (sessionUser && page === 'All Incidents') content = <LiveIncidents role="ADMIN" />;
+  if (sessionUser && page === 'Dashboard') content = <><AdminHome onNavigate={navigate} /><LiveIncidents role="ADMIN" /></>;
   const assignmentPages = { 'Assignment Requests': 'transfer', 'Collaboration Requests': 'collaboration', 'Manage Technicians': 'workload', 'Assignment Strategies': 'strategy' };
   if (sessionUser && assignmentPages[page]) content = <AssignmentManagement key={page} mode={assignmentPages[page]} role="ADMIN" userId={sessionUser.id} />;
 
@@ -570,14 +584,14 @@ export default function AdminDashboard({ sessionUser, sessionNotice }) {
   return <div className={`student-dashboard admin-portal${isMenuOpen ? '' : ' menu-collapsed'}`}>
     <aside className="dashboard-sidebar" id="admin-sidebar" hidden={!isMenuOpen}>
       <div className="dashboard-brand"><span className="brand-name">BITSolve</span><span className="brand-caption">Administrator Portal</span></div>
-      <nav aria-label="Administrator navigation">{pages.map((name) => <button type="button" key={name} className={page === name ? 'dashboard-nav-active' : ''} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}>{name}</button>)}</nav>
+      <nav aria-label="Administrator navigation">{navGroups.map(([group, names]) => <React.Fragment key={group}><span className="nav-group">{group}</span>{names.map((name) => <button type="button" key={name} className={page === name ? 'dashboard-nav-active' : ''} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}><NavIcon name={name} /><span>{name}</span></button>)}</React.Fragment>)}</nav>
       <p className="dashboard-sidebar-note">BITS Pilani<br />Hyderabad Campus</p>
     </aside>
     <div className="dashboard-workspace">
       <header className="dashboard-topbar"><div className="dashboard-heading"><Button27 isOpen={isMenuOpen} onToggle={() => setIsMenuOpen(!isMenuOpen)} controls="admin-sidebar" /><h1>{page === 'Dashboard' ? 'Administrator Dashboard' : page}</h1></div><div className="dashboard-profile"><span className="dashboard-avatar" aria-hidden="true">{admin.name.split(' ').map((part) => part[0]).join('')}</span><div><strong>{admin.name}</strong><span>{sessionUser ? 'Administrator' : 'Administrator · Demo'}</span></div></div></header>
       <main className="dashboard-content">
         {sessionNotice || <div className="dashboard-preview-note"><p><strong>Development preview</strong> · Fictional records. This preview does not authenticate an account. All administrative actions are unsaved proposals.</p><div className="preview-links"><a href="?preview=student">Student preview</a><a href="/">Back to login</a></div></div>}
-        <div className="dashboard-welcome"><div><h2>{page === 'Dashboard' ? 'Campus IT overview' : page}</h2><p>Review incidents, teams and service health in one place.</p></div></div>
+        {sessionUser && page === 'Dashboard' ? <Welcome user={sessionUser} subtitle="Here is the health of campus IT services right now." /> : <div className="dashboard-welcome"><div><h2>{page === 'Dashboard' ? 'Campus IT overview' : page}</h2><p>Review incidents, teams and service health in one place.</p></div></div>}
         {content}
       </main>
       <footer className="dashboard-footer">BITSolve — BITS Hyderabad IT Support</footer>

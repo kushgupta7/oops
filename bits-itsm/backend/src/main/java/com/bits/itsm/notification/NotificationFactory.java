@@ -61,6 +61,14 @@ public final class NotificationFactory {
                 title = "Incident escalated";
                 message = detail;
             }
+            case INFORMATION_REQUESTED -> {
+                title = "Information requested";
+                message = "The technician needs more information on " + inc + ". The SLA clock is paused until you reply.";
+            }
+            case MAJOR_INCIDENT_DETECTED -> {
+                title = "Major incident detected";
+                message = detail;
+            }
             case DUPLICATE_DETECTED -> {
                 title = "Possible duplicate incident";
                 message = detail;

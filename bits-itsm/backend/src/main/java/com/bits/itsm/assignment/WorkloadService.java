@@ -14,7 +14,7 @@ public class WorkloadService {
     public record Workload(Long id, String name, Set<TechnicianSkill> skills, Technician.Availability availability,
             boolean enabled, int maxWorkload, long activePrimary, long activeCollaboration, long total, long highPriority,
             long resolvedCount, long remainingCapacity, String level) { }
-    public static boolean active(IncidentStatus status) { return status == IncidentStatus.ASSIGNED || status == IncidentStatus.ACKNOWLEDGED || status == IncidentStatus.IN_PROGRESS; }
+    public static boolean active(IncidentStatus status) { return com.bits.itsm.incident.state.IncidentLifecycle.of(status).countsTowardWorkload(); }
     public List<Workload> all() {
         Map<Long, long[]> counts = new HashMap<>();
         accumulate(counts, incidents.primaryWorkloads(), false);
@@ -37,11 +37,16 @@ public class WorkloadService {
     }
     public List<AssignmentStrategy.Candidate> candidates(Incident incident) {
         Map<Long, Workload> loads = new HashMap<>(); all().forEach(w -> loads.put(w.id(), w));
+        Map<Long, Long> serviceHistory = new HashMap<>();
+        if (incident.getAffectedService() != null) {
+            for (Object[] row : incidents.resolvedByTechnicianForService(incident.getAffectedService())) serviceHistory.put((Long) row[0], ((Number) row[1]).longValue());
+        }
         return users.findTechnicians().stream().filter(t -> !incident.participates(t.getId()))
                 .map(t -> {
                     Workload load = loads.get(t.getId());
                     // Primary work counts twice, collaboration once, with extra weight for P1/P2.
-                    return new AssignmentStrategy.Candidate(t, load.total(), load.activePrimary() * 2 + load.activeCollaboration() + load.highPriority() * 2);
+                    return new AssignmentStrategy.Candidate(t, load.total(), load.activePrimary() * 2 + load.activeCollaboration() + load.highPriority() * 2,
+                            load.resolvedCount(), serviceHistory.getOrDefault(t.getId(), 0L));
                 }).toList();
     }
 }

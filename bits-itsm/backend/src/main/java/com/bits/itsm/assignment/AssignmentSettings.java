@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 
 @Entity @Table(name = "assignment_settings")
 public class AssignmentSettings {
-    public enum Mode { SKILL_BASED, LOAD_BASED }
+    public enum Mode { SKILL_BASED, LOAD_BASED, ROUND_ROBIN, PRIORITY_BASED, SMART }
     @Id private Long id;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Mode strategy;
     protected AssignmentSettings() { }

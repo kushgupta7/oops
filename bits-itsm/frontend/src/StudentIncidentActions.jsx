@@ -9,7 +9,9 @@ function DraftForm({ kind, incident, onAction }) {
   const [saved, setSaved] = useState(false);
   const proposal = useRef(null);
   useEffect(() => { if (preview) proposal.current?.focus(); }, [preview]);
-  const fields = kind === 'reply' ? [
+  const fields = kind === 'information' ? [
+    { name: 'message', label: 'Additional information for the support team', required: true },
+  ] : kind === 'reply' ? [
     { name: 'message', label: 'Message', required: true }, { name: 'additional', label: 'Additional information (optional)' },
   ] : kind === 'verification' ? [
     { name: 'decision', label: 'Resolution verification', required: true, options: [['CONFIRM', 'Confirm Issue Resolved'], ['UNRESOLVED', 'Issue Still Exists']] },
@@ -40,6 +42,9 @@ function DraftForm({ kind, incident, onAction }) {
       if (kind === 'verification') {
         action = 'verify';
         payload = { confirmed: values.decision === 'CONFIRM', reason: values.explanation || '' };
+      } else if (kind === 'information') {
+        action = 'comment';
+        payload = { content: values.message };
       } else if (kind === 'reply') {
         action = 'reply';
         payload = { content: [values.message, values.additional].filter(Boolean).join('\n') };
@@ -58,7 +63,7 @@ function DraftForm({ kind, incident, onAction }) {
       const props = { id: `${kind}-${field.name}`, name: field.name, value: values[field.name] || '', required: field.required, 'aria-describedby': `${kind}-error`, onChange: (event) => { setValues({ ...values, [field.name]: event.target.value }); setError(''); setPreview(false); } };
       return <div className="report-field" key={field.name}><label htmlFor={props.id}>{field.label}</label>{field.options ? <select {...props}><option value="">Choose an option</option>{field.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : <textarea {...props} rows={3} maxLength={1000} />}</div>;
     })}
-    <div className="report-actions"><button type="submit" className="incident-view" disabled={busy}>{busy ? 'Saving…' : onAction ? 'Submit' : 'Preview'} {kind === 'reply' ? 'Reply' : kind === 'verification' ? 'Verification' : 'Feedback'}</button><button type="button" className="report-clear" disabled={busy} onClick={() => { setValues({}); setError(''); setPreview(false); setSaved(false); }}>Clear Draft</button></div>
+    <div className="report-actions"><button type="submit" className="incident-view" disabled={busy}>{busy ? 'Saving…' : onAction ? 'Submit' : 'Preview'} {kind === 'information' ? 'Information' : kind === 'reply' ? 'Reply' : kind === 'verification' ? 'Verification' : 'Feedback'}</button><button type="button" className="report-clear" disabled={busy} onClick={() => { setValues({}); setError(''); setPreview(false); setSaved(false); }}>Clear Draft</button></div>
     <p id={`${kind}-error`} className="report-error" role="alert">{error}</p>
     {saved && <p role="status">Saved successfully.</p>}
     {preview && <div ref={proposal} tabIndex={-1} className="technician-draft" role="status"><strong>Draft preview — not submitted</strong><dl className="incident-details">{fields.map((field) => <div key={field.name}><dt>{field.label}</dt><dd>{field.options?.find(([value]) => value === values[field.name])?.[1] || values[field.name]?.trim() || 'Not provided'}</dd></div>)}</dl><p>Java backend integration is required to send or save this {kind}. Incident {incident.id} remains {incident.status}. Verification, closure and reopened investigation follow the future backend policy.</p></div>}
@@ -88,7 +93,9 @@ export default function StudentIncidentActions({ incident, onAction }) {
     {incident.status === 'NEW' && <EditReport key={incident.id} incident={incident} onAction={onAction} />}
     <section className="student-detail-section"><h3>Support Communication</h3>
       {incident.notes.length ? <ol className="technician-updates">{incident.notes.map(note => <li key={note.id}><strong>{note.author.name}</strong> · <time dateTime={note.createdAt}>{new Date(note.createdAt).toLocaleString()}</time><p>{note.content}</p></li>)}</ol> : <p>No support messages yet.</p>}
-      {incident.status === 'IN_PROGRESS' && incident.notes.some(note => note.kind === 'INFORMATION_REQUEST') && <DraftForm kind="reply" incident={incident} onAction={onAction} />}
+      {incident.status === 'AWAITING_INFO' && <p role="status"><strong>The technician needs more information.</strong> The SLA clock is paused until you reply.</p>}
+      {incident.status === 'AWAITING_INFO' && incident.notes.some(note => note.kind === 'INFORMATION_REQUEST') && <DraftForm kind="reply" incident={incident} onAction={onAction} />}
+      {['NEW', 'CLASSIFIED', 'ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS'].includes(incident.status) && <><h4 className="add-info-heading">Add information</h4><p className="report-guidance">Noticed something new (an error code, another affected room, a workaround)? Add it here and your technician will be notified.</p><DraftForm key={`info-${incident.updatedAt}`} kind="information" incident={incident} onAction={onAction} /></>}
     </section>
     {incident.status === 'RESOLVED' && <section className="student-detail-section"><h3>Resolution Verification</h3><p>{incident.resolutionSummary}</p><p>{incident.resolutionSteps}</p><DraftForm kind="verification" incident={incident} onAction={onAction} /></section>}
     {['VERIFIED', 'CLOSED'].includes(incident.status) && <section className="student-detail-section"><h3>Support Feedback</h3>{incident.feedback ? <p>Rating: {incident.feedback.rating}/5 · {incident.feedback.comment || 'No comment'}</p> : <DraftForm kind="feedback" incident={incident} onAction={onAction} />}</section>}

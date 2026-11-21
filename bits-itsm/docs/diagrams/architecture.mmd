@@ -1,0 +1,53 @@
+flowchart TB
+  subgraph Browser["Browser — React 19 + Vite + Recharts"]
+    SP[Student portal]
+    TP[Technician portal]
+    AP[Admin portal + Insights]
+  end
+  subgraph App["Spring Boot 4 application (one JAR serves UI + /api)"]
+    SEC["Security filter chain<br/>session + CSRF + role URLs"]
+    CTRL["REST controllers<br/>(HTTP ↔ DTO only)"]
+    subgraph Services["Service layer"]
+      IS[IncidentService]
+      AS[AssignmentService]
+      PS[PriorityService]
+      INS[InsightsService]
+    end
+    subgraph Domain["Domain model"]
+      INC["Incident + IncidentState<br/>(State pattern)"]
+      STR["Priority / Assignment<br/>Strategies"]
+    end
+    subgraph Intel["intelligence"]
+      DUP[DuplicateDetector]
+      COR[IncidentCorrelator]
+      RISK[SlaRiskPredictor]
+      SUG["ResolutionSuggester<br/>TF-IDF"]
+      CAT[CategorySuggester]
+    end
+    subgraph Bg["@Scheduled background jobs"]
+      SLA[SlaMonitor]
+      ESC["EscalationService<br/>Chain of Responsibility"]
+      CM[CorrelationMonitor]
+      AC[AutoCloseScheduler]
+    end
+    BUS(("EventBus<br/>Observer subject"))
+    AUD[AuditLogger]
+    NOT["NotificationService<br/>+ ChannelFactory"]
+    MAIL["EmailChannel<br/>outbox + retry"]
+    SMS["SmsChannel → SmsGatewayAdapter<br/>→ ThirdPartySmsApi"]
+    REPO["Spring Data repositories<br/>+ JdbcTemplate"]
+  end
+  DB[("PostgreSQL 16<br/>Flyway V1–V9")]
+  SMTP[["SMTP / MailHog"]]
+  Browser -->|"JSON over HTTPS, cookie session"| SEC --> CTRL --> Services
+  Services --> Domain
+  Services --> Intel
+  Services --> BUS
+  Bg --> BUS
+  BUS --> AUD & NOT & MAIL
+  NOT --> SMS
+  MAIL --> SMTP
+  Services --> REPO
+  Bg --> REPO
+  AUD --> REPO
+  REPO --> DB

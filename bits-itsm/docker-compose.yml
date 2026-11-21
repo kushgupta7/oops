@@ -1,0 +1,52 @@
+# One-command demo:  docker compose up --build
+#   App + UI   http://localhost:8080   (demo logins in README)
+#   MailHog    http://localhost:8025   (every e-mail the app sends)
+# Demo-only credentials below; never reuse them for a real deployment.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bitsolve
+      POSTGRES_USER: bitsolve
+      POSTGRES_PASSWORD: bitsolve-demo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bitsolve -d bitsolve"]
+      interval: 5s
+      retries: 20
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "8025:8025"
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://db:5432/bitsolve
+      DB_USER: bitsolve
+      DB_PASSWORD: bitsolve-demo
+      SESSION_COOKIE_SECURE: "false"
+      BITSOLVE_DEMO_SEED_ENABLED: "true"
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-BitsolveDemo2026}
+      # Route e-mail to MailHog instead of Gmail (plain SMTP, no TLS inside the compose network).
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: "1025"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: "false"
+      MAIL_USERNAME: bitsolve@hyderabad.bits-pilani.ac.in
+      MAIL_APP_PASSWORD: mailhog
+      APP_BASE_URL: http://localhost:8080
+      MAIL_POLL_INTERVAL_MS: "5000"
+
+volumes:
+  pgdata:

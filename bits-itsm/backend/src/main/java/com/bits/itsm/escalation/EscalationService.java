@@ -17,7 +17,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Automatic escalation of critical incidents.
+ * Automatic escalation of critical incidents (intelligent feature C), implemented with the
+ * Chain of Responsibility in {@link EscalationHandler}.
  * A P1 incident that is still unacknowledged after its response deadline moves up one level
  * (Technician -> Team Lead -> System Administrator -> IT Manager), then one more level every
  * itsm.escalation.step-minutes (also shrunk by itsm.sla.time-scale) until someone acknowledges it.
@@ -40,25 +41,23 @@ public class EscalationService {
         this.step = calculator.scaled(Duration.ofMillis(Math.round(stepMinutes * 60_000)));
     }
 
+    /** Chain of Responsibility: Technician -> Team Lead -> System Administrator -> IT Manager, each with its own timer. */
+    private EscalationHandler chain() {
+        EscalationHandler head = EscalationHandler.technician();
+        head.then(EscalationHandler.timed(EscalationLevel.TEAM_LEAD, Duration.ZERO))
+            .then(EscalationHandler.timed(EscalationLevel.SYSTEM_ADMINISTRATOR, step))
+            .then(EscalationHandler.timed(EscalationLevel.IT_MANAGER, step.multipliedBy(2)));
+        return head;
+    }
+
     public void check(Collection<IncidentSnapshot> incidents, Instant now) {
+        EscalationHandler chain = chain();
         for (IncidentSnapshot i : incidents) {
             if (i.priority() != Incident.Priority.P1 || IncidentStates.isAcknowledged(i) || IncidentStates.isResolved(i)) {
                 continue;
             }
-            Instant deadline = calculator.responseDeadline(i);
-            if (!now.isAfter(deadline)) {
-                continue;
-            }
-            long stepsPast = Duration.between(deadline, now).toMillis() / step.toMillis();
-            int targetIndex = (int) Math.min(1 + stepsPast, EscalationLevel.values().length - 1);
-            EscalationLevel target = EscalationLevel.values()[targetIndex];
-
-            EscalationLevel current = EscalationLevel.TECHNICIAN;
-            while (current.ordinal() < target.ordinal()) {
-                EscalationLevel from = current;
-                current = current.next();
-                escalate(i, from, current, now);
-            }
+            chain.handle(new EscalationHandler.Context(i, calculator.responseDeadline(i), now,
+                    stepTaken -> escalate(stepTaken.incident(), stepTaken.from(), stepTaken.to(), stepTaken.at())));
         }
     }
 

@@ -1,0 +1,29 @@
+@startuml seq-w3
+!include style.iuml
+title W3 — Similar reports → duplicates + major incident → P1 escalation chain
+autonumber
+actor "Students (x3)" as S
+participant IncidentService as IS
+participant DuplicateDetector as DD
+participant "CorrelationMonitor\n@Scheduled" as CM
+participant IncidentCorrelator as IC
+participant "SlaMonitor\n@Scheduled" as SM
+participant "EscalationService\n(Chain of Responsibility)" as ES
+participant ScheduledEvents as SE
+participant EventBus as EB
+actor Administrator
+S -> IS : 3 Wi-Fi reports within 30 min
+IS -> DD : check(new id)
+DD -> EB : DUPLICATE_DETECTED "INC-1062 may duplicate INC-1061 (78%)"
+CM -> IC : correlate(open incidents)
+IC --> CM : MajorIncident(Campus Wi-Fi, 3 reports)
+CM -> SE : publishOnce("1061:MAJOR_INCIDENT:3")
+SE -> EB : MAJOR_INCIDENT_DETECTED → admins (in-app + SMS)
+Administrator -> IS : classify INC-1061 → P1, assign
+SM -> ES : check(snapshots, now)
+ES -> ES : TECHNICIAN handler → TEAM_LEAD handler\n(now > response deadline)
+ES -> SE : publishOnce("1061:ESCALATION:1")
+SE -> EB : INCIDENT_ESCALATED Technician → Team Lead
+ES -> ES : SYSTEM_ADMINISTRATOR handler (≥ 1 step late)\nIT_MANAGER handler (≥ 2 steps late)
+note right of ES : each level fires once;\nstops as soon as the technician acknowledges
+@enduml

@@ -1,0 +1,151 @@
+@startuml class-domain
+!include style.iuml
+title BITSolve — Domain Model (class diagram)
+hide empty members
+
+abstract class User {
+  - id : Long
+  - name : String
+  - email : String
+  - passwordHash : String
+  - enabled : boolean
+  + rename(name)
+  + setEnabled(flag)
+  + {abstract} getRole() : Role
+}
+class Student {
+  - studentNumber : String
+  + getRole() : Role
+}
+class Technician {
+  - skills : Set<TechnicianSkill>
+  - availability : Availability
+  - maxWorkload : int
+  + canReceive(workload) : boolean
+  + configureAssignment(skills, availability, max)
+  + getRole() : Role
+}
+class Administrator {
+  - responsibility : String
+  + getRole() : Role
+}
+User <|-- Student
+User <|-- Technician
+User <|-- Administrator
+
+class Incident <<aggregate root>> {
+  - id : Long
+  - title : String
+  - description : String
+  - category : Category
+  - affectedService : ItService
+  - impact : Level
+  - urgency : Level
+  - priority : Priority
+  - status : IncidentStatus
+  - criticality : Level
+  - createdAt / acknowledgedAt / resolvedAt / closedAt : Instant
+  - responseDeadline / resolutionDeadline : Instant
+  - slaPausedAt : Instant
+  - slaPausedSeconds : long
+  + classify(category, priority)
+  + captureSla(policy)
+  + assign(technician)
+  + acknowledge()
+  + start()
+  + requestInformation()
+  + informationReceived()
+  + resolve(summary, steps)
+  + verify()
+  + issueStillExists()
+  + close()
+  + giveFeedback(student, rating, comment)
+  + state() : IncidentState
+  + responseSla(now) / resolutionSla(now) : SlaClock.Status
+  - move(next)
+}
+class InvestigationNote {
+  - content : String
+  - visibility : Visibility
+  - kind : Kind
+  - createdAt : Instant
+}
+class IncidentHistory <<audit, immutable>> {
+  - action : String
+  - description : String
+  - visibility : Visibility
+  - createdAt : Instant
+}
+class IncidentFeedback {
+  - rating : int  {1..5}
+  - comment : String
+}
+class IncidentCollaborator {
+  - responsibility : String
+}
+class SlaPolicy {
+  - priority : Priority
+  - responseMinutes : int
+  - resolutionMinutes : int
+  + update(response, resolution)
+}
+class CatalogEntry <<IT service / category>> {
+  - kind : String
+  - code : String
+  - label : String
+  - enabled : boolean
+  - criticality : Level
+}
+abstract class AssignmentRequest {
+  - status : Status
+  - requestedAt / reviewedAt : Instant
+  + review(decision, admin, notes)
+}
+class TransferRequest
+class CollaborationRequest
+AssignmentRequest <|-- TransferRequest
+AssignmentRequest <|-- CollaborationRequest
+
+enum IncidentStatus {
+  NEW
+  CLASSIFIED
+  ASSIGNED
+  ACKNOWLEDGED
+  IN_PROGRESS
+  AWAITING_INFO
+  RESOLVED
+  VERIFIED
+  CLOSED
+}
+
+Incident "*" --> "1" Student : reporter >
+Incident "*" --> "0..1" Technician : assignedTechnician >
+Incident *-- "*" InvestigationNote : composition
+Incident *-- "*" IncidentHistory : composition
+Incident *-- "0..1" IncidentFeedback : composition
+Incident *-- "*" IncidentCollaborator
+IncidentCollaborator --> Technician
+Incident ..> SlaPolicy : captures targets
+Incident ..> CatalogEntry : service criticality
+Incident --> IncidentStatus
+AssignmentRequest --> Incident
+AssignmentRequest --> Technician : proposed >
+
+class StoredAudit <<AuditEntry>> {
+  - timestamp : Instant
+  - actorId : Long
+  - action : String
+  - incidentId : Long
+  - previous : String
+  - next : String
+  - description : String
+}
+class NotificationDelivery {
+  - recipientId : Long
+  - channel : String
+  - title / message : String
+  - readAt : Instant
+}
+StoredAudit o-- Incident : aggregation (by id)
+NotificationDelivery ..> Incident
+@enduml

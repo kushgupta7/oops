@@ -67,6 +67,9 @@ public class SlaMonitor {
         } else if (i.acknowledgedAt() != null && i.acknowledgedAt().isAfter(calculator.responseDeadline(i))) {
             checkPhase(i, "RESPONSE", calculator.responseDeadline(i), i.acknowledgedAt());
         }
+        if (IncidentStates.isSlaPaused(i)) {
+            return; // AWAITING_INFO: resolution clock paused, no warnings or breaches while waiting for the reporter
+        }
         if (!IncidentStates.isResolved(i)) {
             checkPhase(i, "RESOLUTION", calculator.resolutionDeadline(i), now);
         } else if (i.resolvedAt() != null && i.resolvedAt().isAfter(calculator.resolutionDeadline(i))) {

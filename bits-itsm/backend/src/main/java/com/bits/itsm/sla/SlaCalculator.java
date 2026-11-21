@@ -95,14 +95,18 @@ public class SlaCalculator {
             atRisk = true;
         }
 
-        if (resolved) {
-            if (i.resolvedAt() != null && i.resolvedAt().isAfter(resolutionDl)) {
+        // AWAITING_INFO: the resolution clock is frozen (the deadline is extended on resume), so the
+        // resolution phase can neither become AT_RISK nor BREACHED while the reporter is being waited on.
+        if (!IncidentStates.isSlaPaused(i)) {
+            if (resolved) {
+                if (i.resolvedAt() != null && i.resolvedAt().isAfter(resolutionDl)) {
+                    breached = true;
+                }
+            } else if (now.isAfter(resolutionDl)) {
                 breached = true;
+            } else if (progress(created, resolutionDl, now) >= WARNING_FRACTION) {
+                atRisk = true;
             }
-        } else if (now.isAfter(resolutionDl)) {
-            breached = true;
-        } else if (progress(created, resolutionDl, now) >= WARNING_FRACTION) {
-            atRisk = true;
         }
 
         if (breached) {

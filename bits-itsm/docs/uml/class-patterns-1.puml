@@ -1,0 +1,67 @@
+@startuml class-patterns-1
+!include style.iuml
+title BITSolve — Design patterns (State, Chain of Responsibility, exceptions)
+hide empty members
+package "State" {
+  interface IncidentState {
+    + status() : IncidentStatus
+    + allowedTransitions() : Set<IncidentStatus>
+    + actorsFor(target) : Set<LifecycleActor>
+    + slaClockRunning() : boolean
+    + countsTowardWorkload() : boolean
+    + requireTransition(target, actor)
+  }
+  abstract class AbstractIncidentState {
+    - transitions : EnumMap<IncidentStatus, Set<LifecycleActor>>
+    # allow(target, actors...)
+  }
+  class NewState
+  class InProgressState
+  class AwaitingInfoState {
+    + slaClockRunning() = false
+  }
+  class ResolvedState
+  class ClosedState
+  class "…4 more states" as More
+  class IncidentLifecycle <<registry>> {
+    - STATES : EnumMap
+    + {static} of(status) : IncidentState
+  }
+  IncidentState <|.. AbstractIncidentState
+  AbstractIncidentState <|-- NewState
+  AbstractIncidentState <|-- InProgressState
+  AbstractIncidentState <|-- AwaitingInfoState
+  AbstractIncidentState <|-- ResolvedState
+  AbstractIncidentState <|-- ClosedState
+  AbstractIncidentState <|-- More
+  IncidentLifecycle o-- IncidentState
+}
+package "Chain of Responsibility" {
+  abstract class EscalationHandler {
+    - next : EscalationHandler
+    + then(next) : EscalationHandler
+    + handle(context)
+    # {abstract} responsible(context) : boolean
+  }
+  class "Technician → Team Lead →\nSystem Admin → IT Manager" as Chain
+  EscalationHandler --> EscalationHandler : next
+  EscalationHandler <|-- Chain
+}
+package "Exceptions" {
+  abstract class BitsolveException {
+    - code : String
+    - httpStatus : int
+  }
+  class InvalidStateTransitionException
+  class TechnicianUnavailableException
+  class MissingSlaConfigurationException
+  class ExternalServiceException
+  class "…8 more" as MoreEx
+  BitsolveException <|-- InvalidStateTransitionException
+  BitsolveException <|-- TechnicianUnavailableException
+  BitsolveException <|-- MissingSlaConfigurationException
+  BitsolveException <|-- ExternalServiceException
+  BitsolveException <|-- MoreEx
+}
+AbstractIncidentState ..> InvalidStateTransitionException : throws
+@enduml

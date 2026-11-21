@@ -10,7 +10,13 @@ import com.bits.itsm.incident.InvestigationNote.Visibility;
 public final class IncidentData {
     private IncidentData() { }
     public record Create(@NotBlank @Size(max = 100) String title, @NotBlank @Size(min = 20, max = 2000) String description,
-            Category category, ItService affectedService, Level impact, Level urgency) { }
+            Category category, ItService affectedService, Level impact, Level urgency,
+            @Min(1) @Max(100000) Integer affectedUsers) {
+        /** Older clients that do not send the (optional) number of affected users. */
+        public Create(String title, String description, Category category, ItService affectedService, Level impact, Level urgency) {
+            this(title, description, category, affectedService, impact, urgency, null);
+        }
+    }
     public record Classification(@NotNull Category category) { }
     public record AdminCorrection(@NotNull ItService affectedService, Category category, @NotNull Level impact, @NotNull Level urgency,
             @NotBlank @Size(min = 5, max = 500) String reason) { }
@@ -29,7 +35,7 @@ public final class IncidentData {
     public record View(Long id, String title, String description, Person reporter, Category category, ItService affectedService,
             String serviceLabel, Level impact, Level urgency, Priority priority, IncidentStatus status, Person assignedTechnician,
             Instant createdAt, Instant updatedAt, Instant acknowledgedAt, Instant resolvedAt, Instant verifiedAt, Instant closedAt,
-            String resolutionSummary, String resolutionSteps, List<NoteView> notes, List<HistoryView> history, FeedbackView feedback, boolean primaryOwner, List<TeamMember> collaborators, com.bits.itsm.intelligence.CategorySuggester.Suggestion categorySuggestion, Level criticality, Instant responseDeadline, Instant resolutionDeadline, SlaClock.Status responseSla, SlaClock.Status resolutionSla,
+            String resolutionSummary, String resolutionSteps, List<NoteView> notes, List<HistoryView> history, FeedbackView feedback, boolean primaryOwner, List<TeamMember> collaborators, com.bits.itsm.intelligence.CategorySuggester.Suggestion categorySuggestion, Level criticality, Instant responseDeadline, Instant resolutionDeadline, SlaClock.Status responseSla, SlaClock.Status resolutionSla, boolean slaPaused, long slaPausedSeconds, Integer affectedUsers, Double slaFactor,
             boolean needsClassificationReview, boolean autoClassified, String classificationNotes) { }
     public record Option(String value, String label) { }
     public record Options(List<Option> categories, List<Option> services) { }
