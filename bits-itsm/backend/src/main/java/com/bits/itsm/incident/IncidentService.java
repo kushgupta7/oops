@@ -170,7 +170,9 @@ public class IncidentService {
 
         // Automatic backend classification
         classificationService.processSubmission(incident, user);
-        incidents.saveAndFlush(incident);
+        // The incident is already managed: flush (not saveAndFlush, which would merge and copy the new
+        // history entry as an empty object) so the cascaded history row is inserted correctly.
+        incidents.flush();
 
         if (incident.isAutoClassified()) {
             events.publish(incident.getId(), user.getId(), "PRIORITY_CHANGED", "PENDING", incident.getPriority().name(),
@@ -208,7 +210,7 @@ public class IncidentService {
         Incident incident = incidents.findForUpdate(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found."));
         String previousPriority = incident.getPriority() != null ? incident.getPriority().name() : "PENDING";
         classificationService.reclassify(incident, request.affectedService(), request.category(), request.impact(), request.urgency(), request.reason(), user);
-        incidents.saveAndFlush(incident);
+        incidents.flush(); // managed entity: flush, never merge (see create)
         events.publish(id, user.getId(), "PRIORITY_CHANGED", previousPriority, incident.getPriority().name(),
                 "Administrator updated classification: " + request.reason());
         return view(incident, user);
